@@ -1,0 +1,108 @@
+;;; Some macro utilities.
+
+;;; accumulator/index modes.
+;;; This is a bit of a blunt force instrument. Could be improved.
+.macro acc8i16
+	sep #$20
+	.a8
+	.i16
+.endmacro
+
+.macro acc16i16
+	rep #$30
+	.a16
+	.i16
+.endmacro
+
+.macro acc8i8
+	sep #$30
+	.a8
+	.i8
+.endmacro
+
+.macro acc16i8
+	sep #$10
+	.a16
+	.i8
+.endmacro
+
+;;; Store a 32-bit value somewhere.
+.macro Store32 v, d
+.if (.match (.left (1, {v}), #))
+	;; immediate mode
+	lda #.loword(.right (.tcount ({v})-1, {v}))
+.else
+	lda v
+.endif
+	sta d
+.if (.match (.left (1, {v}), #))
+	lda #.hiword(.right (.tcount ({v})-1, {v}))
+.else
+	lda v+2
+.endif
+	sta d+2
+.endmacro
+
+;;; Add two 32 bit values into somewhere.
+.macro Add32 OP1, OP2, DEST
+.local no_carry
+	clc
+.if (.match (.left (1, {OP1}), #))
+	lda #.loword(.right (.tcount ({OP1})-1, {OP1}))
+.else
+	lda OP1
+.endif  
+.if (.match (.left (1, {OP2}), #))
+	adc #.loword(.right (.tcount ({OP2})-1, {OP2}))
+.else
+	adc OP2
+.endif  
+	sta DEST
+	bcc no_carry
+	inc DEST
+no_carry:
+.if (.match (.left (1, {OP1}), #))
+	lda #.hiword(.right (.tcount ({OP1})-1, {OP1}))
+.else
+	lda OP1+2
+.endif  
+.if (.match (.left (1, {OP2}), #))
+	adc #.hiword(.right (.tcount ({OP2})-1, {OP2}))
+.else
+	adc OP2+2
+.endif  
+	sta DEST+2
+.endmacro
+
+;;; Subtract two 32 bit values into somewhere.
+.macro Sub32 OP1, OP2, DEST
+ .local no_carry
+	sec
+.if (.match (.left (1, {OP1}), #))
+	lda #.loword(.right (.tcount ({OP1})-1, {OP1}))
+.else
+	lda OP1
+.endif  
+.if (.match (.left (1, {OP2}), #))
+	sbc #.loword(.right (.tcount ({OP2})-1, {OP2}))
+.else
+	sbc OP2
+.endif  
+	sta DEST
+	bcs no_carry
+	dec DEST
+ no_carry:
+	sec
+.if (.match (.left (1, {OP1}), #))
+	lda #.hiword(.right (.tcount ({OP1})-1, {OP1}))
+.else
+	lda OP1+2
+.endif  
+.if (.match (.left (1, {OP2}), #))
+	sbc #.hiword(.right (.tcount ({OP2})-1, {OP2}))
+.else
+	sbc OP2+2
+.endif  
+	sta DEST+2
+.endmacro
+
