@@ -84,6 +84,11 @@ O65_UNRESOLVED_EXTERNAL = $0c
   ; ext references working area
 
   num_references:    .res 4
+  external_names:     .res 4
+  external_index:     .res 2
+  symbol_table:       .res 4
+  name_ptr:           .res 4
+  symbol_ptr:         .res 4
 
   ; exported globals working area
   entry_addr:         .res 4
@@ -103,7 +108,14 @@ start:
 	sta f:__ZEROPAGE_LOAD__ + program
 	pha			; A, X, Y, D for return/stack balance
 	txa
+	and #$00ff
 	sta f:__ZEROPAGE_LOAD__ + program+2
+	txa
+	xba
+	and #$00ff
+	sta f:__ZEROPAGE_LOAD__ + symbol_table+2
+	tya
+	sta f:__ZEROPAGE_LOAD__ + symbol_table
 	phx
 	phy
 	phd
@@ -508,7 +520,7 @@ write_emu_return_stub:
 .endscope
 
 ;;; Scan the external references from the program.
-;;; Currently discards them.
+;;; The names stay in place and may be resolved later by relocation index.
 load_external_references:
 .scope
 	clc
@@ -520,9 +532,12 @@ load_external_references:
 	stz num_references+2
 read_num_refs_32:
 	PrgNext32To num_references
-	bra eat_references_loop
+	bra eat_references_start
 read_num_refs_16:
 	PrgNext16To num_references
+	stz num_references+2
+eat_references_start:
+	Store32 program, external_names
 eat_references_loop:
 	lda num_references
 	ora num_references+2
@@ -926,6 +941,85 @@ done_check_reloc_bounds:
 	rts
 .endscope
 
+find_external_name:
+.scope
+	Store32 external_names, name_ptr
+	ldx external_index
+skip_names:
+	cpx #0
+	beq done_find_external_name
+skip_name_byte:
+	lda [name_ptr]
+	and #$00ff
+	beq next_name
+	Inc32 name_ptr
+	bra skip_name_byte
+next_name:
+	Inc32 name_ptr
+	dex
+	bra skip_names
+done_find_external_name:
+	rts
+.endscope
+
+resolve_external_symbol:
+.scope
+	lda symbol_table
+	ora symbol_table+2
+	bne start_lookup
+	jmp fail_unresolved
+start_lookup:
+	jsr find_external_name
+	Store32 symbol_table, symbol_ptr
+next_symbol:
+	lda [symbol_ptr]
+	and #$00ff
+	beq fail_unresolved
+	Store32 name_ptr, R0
+	Store32 symbol_ptr, R1
+compare_name:
+	lda [R0]
+	and #$00ff
+	sta working_byte
+	lda [R1]
+	and #$00ff
+	cmp working_byte
+	bne skip_symbol
+	lda working_byte
+	beq symbol_found
+	Inc32 R0
+	Inc32 R1
+	bra compare_name
+skip_symbol:
+	lda [symbol_ptr]
+	and #$00ff
+	beq skip_symbol_value
+	Inc32 symbol_ptr
+	bra skip_symbol
+skip_symbol_value:
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	bra next_symbol
+symbol_found:
+	Inc32 R1
+	lda [R1]
+	sta new_segment_base
+	Inc32 R1
+	Inc32 R1
+	lda [R1]
+	and #$00ff
+	sta new_segment_base+2
+	rts
+fail_unresolved:
+	acc8i16
+	lda #O65_UNRESOLVED_EXTERNAL
+	sta status
+	acc16i16
+	rts
+.endscope
+
 ;;; Scan for and perform relocations.
 perform_relocations:
 .scope
@@ -1023,11 +1117,19 @@ start_bss_seg_reloc:
 	jsr do_reloc
 	jmp continue_relocations
 unresolved_external:
+	jsr prg_next_word
+	sta external_index
+	Store32 #$00000000, cur_segment_base
+	jsr resolve_external_symbol
 	acc8i16
-	lda #O65_UNRESOLVED_EXTERNAL
-	sta status
+	lda status
+	cmp #0
 	acc16i16
+	beq external_resolved
 	bra relocations_failed
+external_resolved:
+	jsr do_reloc
+	jmp continue_relocations
 unknown_segment_type:
 	acc8i16
 	lda #O65_UNKNOWN_RELOC_SEGMENT

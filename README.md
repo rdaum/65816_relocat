@@ -25,7 +25,9 @@ The situation is:
 - The loader binary is linked to run at `$010000`.
 - The caller passes the o65 program image address in registers:
   - `A`: low 16 bits of the image address
-  - `X`: bank byte of the image address
+  - `X` low byte: bank byte of the image address
+  - `X` high byte: optional symbol table bank byte
+  - `Y`: optional symbol table low 16 bits
 - The loader relocates the image in place.
 - Native 65816 programs are entered with `RTL` semantics and are expected to
   return with `RTL`.
@@ -40,6 +42,17 @@ The return instruction is part of the loader ABI. Native 65816 programs are
 called through a long-return stack frame, so they exit with `RTL`. Plain 6502
 and `CPU2_65816_EMU` programs run in emulation mode and exit with `RTS` to a
 small native-mode return stub that the loader writes after the loaded image.
+
+If `Y` and the high byte of `X` point at a symbol table, unresolved external
+relocation entries are resolved by name against that table. The table format is
+a sequence of entries:
+
+```text
+name\0 address-low address-high address-bank
+```
+
+An empty name byte terminates the table. Symbol addresses are absolute 24-bit
+runtime addresses.
 
 The loader code address and direct-page workspace address are fixed at link
 time by `asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
@@ -62,8 +75,8 @@ The loader currently supports:
 - Simple addressing mode.
 - 16-bit and 32-bit o65 size fields.
 - Header option scanning, with structural validation of option lengths.
-- Undefined/external reference list scanning. Relocation entries that require an
-  external symbol are rejected as unresolved.
+- Undefined/external reference list scanning and late-bound symbol table
+  resolution.
 - Chained executable loading.
 - Text and data relocation tables.
 - Relocation target bounds checking against the text/data segment currently
@@ -137,14 +150,14 @@ Coverage includes:
 - alignment acceptance/rejection
 - 16-bit and 32-bit size fields
 - header options and external references
-- unresolved external relocation rejection
+- external relocation resolution and unresolved external rejection
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2115` bytes.
+loader is `2365` bytes.
 
 ## Remaining gaps / TODO
 
@@ -152,8 +165,6 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
-- Undefined external references are not resolved through a late-binding symbol
-  table.
 - Export scanning only uses `main` / `_main`; it does not expose a general
   symbol lookup API.
 - Header option payloads are not interpreted.

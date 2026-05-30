@@ -105,3 +105,10 @@ no_carry:
 .endif  
 	sta DEST+2
 .endmacro
+
+.macro Inc32 D
+	inc D
+	bne :+
+	inc D+2
+:
+.endmacro

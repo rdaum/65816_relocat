@@ -5,6 +5,7 @@ use wdc65816::{HasAddressBus, Processor, StatusRegister};
 
 const LOADER_ADDR: usize = 0x010000;
 const PROGRAM_ADDR: usize = 0x030000;
+const SYMBOL_TABLE_ADDR: usize = 0x050000;
 const ZP_ADDR: usize = 0x00ae00;
 const RETURN_BANK: u8 = 0x02;
 const RETURN_ADDR: u16 = 0x1234;
@@ -13,7 +14,7 @@ const ZP_STATUS: usize = ZP_ADDR;
 const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
 const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
-const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x5d;
+const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x6f;
 
 const O65_CPU_65816: u16 = 0x8000;
 const O65_CPU2_65C02: u16 = 0x0010;
@@ -225,10 +226,26 @@ fn run_loader(program: &[u8]) -> (Processor, Memory) {
 }
 
 fn run_loader_at(program_addr: usize, program: &[u8]) -> (Processor, Memory) {
+    run_loader_at_with_symbols(program_addr, program, 0, &[])
+}
+
+fn run_loader_with_symbols(program: &[u8], symbol_table: &[u8]) -> (Processor, Memory) {
+    run_loader_at_with_symbols(PROGRAM_ADDR, program, SYMBOL_TABLE_ADDR, symbol_table)
+}
+
+fn run_loader_at_with_symbols(
+    program_addr: usize,
+    program: &[u8],
+    symbol_table_addr: usize,
+    symbol_table: &[u8],
+) -> (Processor, Memory) {
     let loader = build_loader();
     let mut memory = Memory::new();
     memory.load(LOADER_ADDR, &loader);
     memory.load(program_addr, program);
+    if !symbol_table.is_empty() {
+        memory.load(symbol_table_addr, symbol_table);
+    }
     for field_offset in (0..36).step_by(4) {
         memory.write(ZP_HEADER_TABLE + field_offset + 2, 0xcc);
         memory.write(ZP_HEADER_TABLE + field_offset + 3, 0xcc);
@@ -243,7 +260,9 @@ fn run_loader_at(program_addr: usize, program: &[u8]) -> (Processor, Memory) {
     cpu.a = (program_addr & 0xff) as u8;
     cpu.b = ((program_addr >> 8) & 0xff) as u8;
     cpu.xl = ((program_addr >> 16) & 0xff) as u8;
-    cpu.xh = 0;
+    cpu.xh = ((symbol_table_addr >> 16) & 0xff) as u8;
+    cpu.yl = (symbol_table_addr & 0xff) as u8;
+    cpu.yh = ((symbol_table_addr >> 8) & 0xff) as u8;
 
     let return_minus_one = RETURN_ADDR.wrapping_sub(1).to_le_bytes();
     memory.write(0x01fd, return_minus_one[0]);
@@ -260,6 +279,19 @@ fn run_loader_at(program_addr: usize, program: &[u8]) -> (Processor, Memory) {
     panic!("loader did not return; cpu={cpu:?}");
 }
 
+fn symbol_table(entries: &[(&[u8], u32)]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for (name, value) in entries {
+        out.extend(*name);
+        out.push(0x00);
+        out.push((value & 0xff) as u8);
+        out.push(((value >> 8) & 0xff) as u8);
+        out.push(((value >> 16) & 0xff) as u8);
+    }
+    out.push(0x00);
+    out
+}
+
 fn seg_base(memory: &Memory) -> usize {
     memory.long24(ZP_SEG_BASE) as usize
 }
@@ -267,7 +299,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2115, "loader grew to {size} bytes");
+    assert!(size <= 2365, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -679,6 +711,25 @@ fn rejects_unresolved_external_relocation() {
     assert_eq!(memory.byte(ZP_STATUS), 0x0c);
     assert_eq!(cpu.c() & 0x00ff, 0x000c);
     assert_eq!(memory.word(base + 1), 0x1234);
+}
+
+#[test]
+fn resolves_external_word_relocation_from_symbol_table() {
+    let mut o65 = O65::new(vec![0x6b, 0x00, 0x00]);
+    o65.external_refs = vec![b"puts".to_vec()];
+    o65.text_relocs = vec![
+        0x02,
+        0x80, // WORD relocation against undefined segment 0.
+        0x00,
+        0x00,
+    ];
+    let symbols = symbol_table(&[(b"puts", 0x12_3456)]);
+
+    let (_cpu, memory) = run_loader_with_symbols(&o65.build(), &symbols);
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.word(base + 1), 0x3456);
 }
 
 #[test]
