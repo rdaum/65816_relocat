@@ -3,5 +3,4 @@ o65 executable relocator and runner written in 65816 (ca65) assembler.
 See: http://www.6502.org/users/andre/o65/
 
 TODO:
-	* Support exported labels (like "main"?)
 	* More error handling & sanity checking throughout.

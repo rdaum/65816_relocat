@@ -13,6 +13,7 @@ const ZP_STATUS: usize = ZP_ADDR;
 const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
 const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
+const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x55;
 
 const O65_CPU_65816: u16 = 0x8000;
 const O65_SIZE_32BIT: u16 = 0x2000;
@@ -23,6 +24,8 @@ const O65_BSSZERO: u16 = 0x0200;
 const O65_ALIGN_2: u16 = 0x0001;
 const O65_ALIGN_4: u16 = 0x0002;
 const O65_ALIGN_256: u16 = 0x0003;
+
+const TEXT_SEGMENT: u8 = 2;
 
 #[derive(Clone)]
 struct Memory {
@@ -83,6 +86,14 @@ struct O65 {
     external_refs: Vec<Vec<u8>>,
     text_relocs: Vec<u8>,
     data_relocs: Vec<u8>,
+    exports: Vec<Export>,
+}
+
+#[derive(Default)]
+struct Export {
+    name: Vec<u8>,
+    segment: u8,
+    value: u32,
 }
 
 impl O65 {
@@ -154,6 +165,22 @@ impl O65 {
         out.push(0x00);
         out.extend(&self.data_relocs);
         out.push(0x00);
+
+        if self.mode & O65_SIZE_32BIT == 0 {
+            push_u16(&mut out, self.exports.len() as u16);
+        } else {
+            push_u32(&mut out, self.exports.len() as u32);
+        }
+        for export in &self.exports {
+            out.extend(&export.name);
+            out.push(0x00);
+            out.push(export.segment);
+            if self.mode & O65_SIZE_32BIT == 0 {
+                push_u16(&mut out, export.value as u16);
+            } else {
+                push_u32(&mut out, export.value);
+            }
+        }
         out
     }
 }
@@ -228,7 +255,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1340, "loader grew to {size} bytes");
+    assert!(size <= 1758, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -353,6 +380,62 @@ fn runs_minimal_program_and_records_segment_base() {
         (PROGRAM_ADDR + program.len()) as u32
     );
     assert_eq!(seg_base(&memory), PROGRAM_ADDR + 27);
+}
+
+#[test]
+fn starts_at_exported_main_when_present() {
+    let mut o65 = O65::new(vec![0x00, 0x6b]);
+    o65.exports = vec![Export {
+        name: b"main".to_vec(),
+        segment: TEXT_SEGMENT,
+        value: 1,
+    }];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.long24(ZP_ENTRY_ADDR), (base + 1) as u32);
+}
+
+#[test]
+fn starts_at_exported_under_main_when_present() {
+    let mut o65 = O65::new(vec![0x6b, 0x6b]);
+    o65.exports = vec![Export {
+        name: b"_main".to_vec(),
+        segment: TEXT_SEGMENT,
+        value: 1,
+    }];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.long24(ZP_ENTRY_ADDR), (base + 1) as u32);
+}
+
+
+#[test]
+fn prefers_exported_under_main_over_main() {
+    let mut o65 = O65::new(vec![0x00, 0x6b, 0x6b]);
+    o65.exports = vec![
+        Export {
+            name: b"_main".to_vec(),
+            segment: TEXT_SEGMENT,
+            value: 2,
+        },
+        Export {
+            name: b"main".to_vec(),
+            segment: TEXT_SEGMENT,
+            value: 1,
+        },
+    ];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.long24(ZP_ENTRY_ADDR), (base + 2) as u32);
 }
 
 #[test]

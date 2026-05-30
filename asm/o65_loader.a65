@@ -78,6 +78,12 @@ O65_BAD_HEADER_OPTION = $09
 
   num_references:    .res 4
 
+  ; exported globals working area
+  entry_addr:         .res 4
+  entry_label:        .res 1
+  name_match:         .res 1
+  name_pos:           .res 1
+
 ;;; Code section
 .reloc				; Let the linker decide where to put this.
 .code
@@ -110,10 +116,10 @@ start:
 
 	;; then jump to it by pushing address to stack and rtl
 	acc8i16
-	lda seg_base+2
+	lda entry_addr+2
 	pha
 	acc16i16
-	lda seg_base
+	lda entry_addr
 	dec
 	pha
   rtl
@@ -427,6 +433,198 @@ done_load_external_references:
 	rts
 .endscope
 
+;;; Scan exported globals and use main/_main as the entry point if present.
+;;; _main takes priority over main.
+load_exported_globals:
+.scope
+	lda mode
+	and #O65_SIZE_32BIT
+	cmp #O65_SIZE_32BIT
+	bne read_num_globals_16
+	stz num_references
+	stz num_references+2
+	PrgNext32To num_references
+	bra global_loop
+read_num_globals_16:
+	PrgNext16To num_references
+	stz num_references+2
+global_loop:
+	lda num_references
+	ora num_references+2
+	cmp #0
+	bne start_global_entry
+	jmp done_load_exported_globals
+
+start_global_entry:
+	acc8i16
+	stz name_pos
+	lda #$03
+	sta name_match
+	acc16i16
+read_name:
+	jsr prg_next_byte
+	cmp #0
+	bne continue_name
+	jmp finish_name
+continue_name:
+	acc8i16
+	sta working_byte
+	lda name_pos
+	cmp #0
+	beq check_pos0
+	cmp #1
+	beq check_pos1
+	cmp #2
+	beq check_pos2
+	cmp #3
+	beq check_pos3
+	cmp #4
+	beq check_pos4
+	stz name_match
+	bra next_name_char
+check_pos0:
+	lda working_byte
+	cmp #$6d        ; m
+	beq pos0_main_ok
+	lda name_match
+	and #$fe
+	sta name_match
+pos0_main_ok:
+	lda working_byte
+	cmp #$5f        ; _
+	beq next_name_char
+	lda name_match
+	and #$fd
+	sta name_match
+	bra next_name_char
+check_pos1:
+	lda working_byte
+	cmp #$61        ; a
+	beq pos1_main_ok
+	lda name_match
+	and #$fe
+	sta name_match
+pos1_main_ok:
+	lda working_byte
+	cmp #$6d        ; m
+	beq next_name_char
+	lda name_match
+	and #$fd
+	sta name_match
+	bra next_name_char
+check_pos2:
+	lda working_byte
+	cmp #$69        ; i
+	beq pos2_main_ok
+	lda name_match
+	and #$fe
+	sta name_match
+pos2_main_ok:
+	lda working_byte
+	cmp #$61        ; a
+	beq next_name_char
+	lda name_match
+	and #$fd
+	sta name_match
+	bra next_name_char
+check_pos3:
+	lda working_byte
+	cmp #$6e        ; n
+	beq pos3_main_ok
+	lda name_match
+	and #$fe
+	sta name_match
+pos3_main_ok:
+	lda working_byte
+	cmp #$69        ; i
+	beq next_name_char
+	lda name_match
+	and #$fd
+	sta name_match
+	bra next_name_char
+check_pos4:
+	lda name_match
+	and #$fe
+	sta name_match
+	lda working_byte
+	cmp #$6e        ; n
+	beq next_name_char
+	lda name_match
+	and #$fd
+	sta name_match
+next_name_char:
+	inc name_pos
+	acc16i16
+	brl read_name
+finish_name:
+	acc8i16
+	lda name_pos
+	cmp #4
+	beq main_length_ok
+	lda name_match
+	and #$fe
+	sta name_match
+main_length_ok:
+	lda name_pos
+	cmp #5
+	beq under_main_length_ok
+	lda name_match
+	and #$fd
+	sta name_match
+under_main_length_ok:
+	acc16i16
+
+	PrgNext8To segment
+	lda mode
+	and #O65_SIZE_32BIT
+	cmp #O65_SIZE_32BIT
+	bne read_global_value_16
+	PrgNext32To R0
+	bra maybe_set_entry
+read_global_value_16:
+	PrgNext16To R0
+	stz R0+2
+maybe_set_entry:
+	acc8i16
+	lda segment
+	cmp #TEXT_SEGMENT
+	bne dec_global_count
+	lda name_match
+	and #$02
+	cmp #$02
+	beq set_under_main_entry
+	lda name_match
+	and #$01
+	cmp #$01
+	bne dec_global_count
+	lda entry_label
+	cmp #$02
+	beq dec_global_count
+	lda #$01
+	sta entry_label
+	acc16i16
+	Add32 seg_base, R0, entry_addr
+	bra dec_global_count_16
+set_under_main_entry:
+	acc8i16
+	lda #$02
+	sta entry_label
+	acc16i16
+	Add32 seg_base, R0, entry_addr
+dec_global_count_16:
+	acc16i16
+dec_global_count:
+	acc16i16
+	lda num_references
+	bne dec_global_count_low
+	dec num_references+2
+dec_global_count_low:
+	dec num_references
+	brl global_loop
+done_load_exported_globals:
+	rts
+.endscope
+
 ;; Do the actual the relocation of working_addr.
 .macro AdjustAddr
 	Sub32 working_addr, cur_segment_base, working_addr
@@ -667,6 +865,9 @@ load_program:
 	stz new_segment_base+2
 	stz working_addr
 	stz working_addr+2
+	acc8i16
+	stz entry_label
+	acc16i16
 step_load_header:
 	jsr load_header         ; load the header
 	acc8i16
@@ -696,6 +897,7 @@ step_check_alignment:
 	brl done_load_program
 store_seg_base:
 	Store32 program, seg_base
+	Store32 program, entry_addr
 step_jump_past_segments:
   ; jump offset by tlen+dlen
 	clc
@@ -722,7 +924,7 @@ step_load_external_references:
 	cmp #0
 	acc16i16
 	beq step_perform_text_relocations
-	bra done_load_program
+	brl done_load_program
 step_perform_text_relocations:
 	jsr perform_relocations     ; perform text seg relocations
 	acc8i16
@@ -734,6 +936,15 @@ step_perform_text_relocations:
 	bra done_load_program
 step_perform_data_relocations:
 	jsr perform_relocations
+	acc8i16
+	clc
+	lda status
+	cmp #0
+	acc16i16
+	beq step_load_exported_globals
+	bra done_load_program
+step_load_exported_globals:
+	jsr load_exported_globals
 	acc8i16
 	clc
 	lda status
