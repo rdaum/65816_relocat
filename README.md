@@ -27,7 +27,10 @@ The situation is:
   - `A`: low 16 bits of the image address
   - `X`: bank byte of the image address
 - The loader relocates the image in place.
-- It then jumps to the relocated program using native 65816 `RTL` semantics.
+- Native 65816 programs are entered with `RTL` semantics and are expected to
+  return with `RTL`.
+- Plain 6502 programs and `CPU2_65816_EMU` programs are entered in 65816
+  emulation mode and are expected to return with `RTS`.
 - If no exported entry symbol is found, execution starts at the relocated text
   segment start.
 - If an exported text symbol named `main` or `_main` exists, that symbol is used
@@ -37,15 +40,23 @@ The loader code address and direct-page workspace address are fixed by
 `asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
 runtime.
 
+That link-time placement is intentional: this loader is meant to be integrated
+as a resident OS/monitor service. Porting it to a different memory map should
+usually mean adjusting `asm/o65_loader.cfg`, not making the loader
+position-independent.
+
 ## Implemented o65 Support
 
 The loader currently supports:
 
 - Native 65816 executable files.
+- Plain 6502 executable files, entered in 65816 emulation mode.
+- `CPU2_65816_EMU` executable files, entered in 65816 emulation mode.
 - Simple addressing mode.
 - 16-bit and 32-bit o65 size fields.
 - Header option scanning, with structural validation of option lengths.
 - Undefined/external reference list skipping.
+- Chained executable loading.
 - Text and data relocation tables.
 - Exported global list scanning for `main` / `_main`.
 - BSS clearing when the `BSSZERO` mode bit is set.
@@ -74,7 +85,6 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x03`: unknown relocation type
 - `0x04`: object file, not executable
 - `0x05`: non-simple addressing mode
-- `0x06`: chained o65 file
 - `0x07`: requested alignment is not satisfied by the in-place segment start
 - `0x08`: unsupported CPU mode
 - `0x09`: malformed header option
@@ -105,9 +115,10 @@ Coverage includes:
 
 - bad header rejection
 - object-file rejection
-- chained-file rejection
+- chained-file loading
 - non-simple addressing rejection
-- unsupported CPU rejection
+- unsupported CPU2 rejection
+- 6502 and 65816-emulation-mode entry/return
 - malformed header option rejection
 - alignment acceptance/rejection
 - 16-bit and 32-bit size fields
@@ -117,17 +128,14 @@ Coverage includes:
 - exported `main` / `_main` entry-point selection
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `1758` bytes.
+loader is `1898` bytes.
 
 ## Remaining gaps / TODO
 
 This is still a not a complete o65 runtime loader. Known gaps include:
 
-- The loader code address and direct-page workspace address are fixed at link
-  time by `asm/o65_loader.cfg`.
-- Chained files are rejected, not loaded in sequence.
-- 6502 and 65816-emulation-mode programs are rejected, not entered using a
-  different calling convention.
+- 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
+  emulated.
 - Undefined external references are skipped, not resolved through a late-binding
   symbol table.
 - Export scanning only uses `main` / `_main`; it does not expose a general
@@ -135,7 +143,8 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - Header option payloads are not interpreted.
 - Pagewise relocation mode is not implemented.
 - Memory bounds and malformed-table checks are still minimal.
-- The loader assumes loaded programs return with `RTL`.
+- Native 65816 programs must return with `RTL`; 6502/emulation-mode programs
+  must return with `RTS`.
 
 ## Notes
 

@@ -16,6 +16,8 @@ RELOC_SEG = $a0
 
 O65_CPU_65816 = $8000
 O65_CPU_MASK = $8000
+O65_CPU2_65816_EMU = $0050
+O65_CPU2_MASK = $00f0
 O65_SIZE_32BIT = $2000
 O65_FTYPE_OBJ = $1000
 O65_ADDR_SIMPLE = $0800
@@ -31,7 +33,6 @@ O65_UNKNOWN_RELOC_SEGMENT = $02
 O65_UNKNOWN_RELOC_TYPE = $03
 O65_OBJECT_FILE = $04
 O65_NON_SIMPLE = $05
-O65_CHAINED_FILE = $06
 O65_UNSUPPORTED_ALIGN = $07
 O65_UNSUPPORTED_CPU = $08
 O65_BAD_HEADER_OPTION = $09
@@ -80,9 +81,13 @@ O65_BAD_HEADER_OPTION = $09
 
   ; exported globals working area
   entry_addr:         .res 4
+  first_entry_addr:   .res 4
+  first_mode:         .res 2
+  emu_return_addr:    .res 4
   entry_label:        .res 1
   name_match:         .res 1
   name_pos:           .res 1
+  chain_count:        .res 1
 
 ;;; Code section
 .reloc				; Let the linker decide where to put this.
@@ -102,6 +107,10 @@ start:
 	tcd
 
 	;; perform relocation
+	acc8i16
+	stz chain_count
+	acc16i16
+load_chain:
 	jsr load_program
 
   ;; check status
@@ -110,6 +119,33 @@ start:
 	cpx #0
   bne done      ; TODO: push error code back somehow
 
+	ldx chain_count
+	cpx #0
+	bne check_chain_bit
+	acc16i16
+	Store32 entry_addr, first_entry_addr
+	lda mode
+	sta first_mode
+	acc8i16
+	inc chain_count
+check_chain_bit:
+	acc16i16
+	lda mode
+	and #O65_CHAIN
+	cmp #O65_CHAIN
+	bne chain_done
+	brl load_chain
+
+chain_done:
+	Store32 first_entry_addr, entry_addr
+
+	lda first_mode
+	and #O65_CPU_MASK
+	cmp #O65_CPU_65816
+	beq enter_native
+	jmp enter_emulation
+
+enter_native:
   ;; We'll return to 'done' after the executable exits.
   phb
   pea done-1
@@ -123,6 +159,28 @@ start:
 	dec
 	pha
   rtl
+
+enter_emulation:
+	jsr write_emu_return_stub
+
+	;; The program returns with RTS to a stub in its own bank. The stub
+	;; switches back to native mode and long-jumps to done.
+	lda emu_return_addr
+	dec
+	pha
+
+	;; Enter the emulation-mode program with RTL so its bank can differ from
+	;; the loader bank.
+	acc8i16
+	lda entry_addr+2
+	pha
+	acc16i16
+	lda entry_addr
+	dec
+	pha
+	sec
+	xce
+	rtl
 
 done:
   acc16i16
@@ -250,17 +308,19 @@ good_magic:
 
 	and #O65_CPU_MASK
 	cmp #O65_CPU_65816
+	beq check_file_type
+	lda mode
+	and #O65_CPU2_MASK
+	cmp #0
+	beq check_file_type
+	cmp #O65_CPU2_65816_EMU
 	bne fail_unsupported_cpu
 
+check_file_type:
 	lda mode
 	and #O65_FTYPE_OBJ
 	cmp #O65_FTYPE_OBJ
 	beq fail_object_file
-
-	lda mode
-	and #O65_CHAIN
-	cmp #O65_CHAIN
-	beq fail_chained_file
 
 	lda mode
 	and #O65_ADDR_SIMPLE
@@ -307,12 +367,6 @@ fail_object_file:
 fail_non_simple:
 	acc8i16
 	lda #O65_NON_SIMPLE
-	sta status
-	acc16i16
-	bra done_load_header
-fail_chained_file:
-	acc8i16
-	lda #O65_CHAINED_FILE
 	sta status
 	acc16i16
 	bra done_load_header
@@ -395,6 +449,44 @@ fail_align:
 	sta status
 	acc16i16
 done_check_alignment:
+	rts
+.endscope
+
+;;; Install an emulation-mode return stub in the loaded program's bank.
+;;; The 6502-style program returns here with RTS.
+write_emu_return_stub:
+.scope
+	Store32 program, emu_return_addr
+	lda entry_addr+2
+	sta emu_return_addr+2
+
+	ldy #0
+	acc8i16
+	lda #$18        ; CLC
+	sta [emu_return_addr],y
+	iny
+	lda #$fb        ; XCE: C=0, E=1 -> native mode
+	sta [emu_return_addr],y
+	iny
+	lda #$c2        ; REP #$30
+	sta [emu_return_addr],y
+	iny
+	lda #$30
+	sta [emu_return_addr],y
+	iny
+	lda #$5c        ; JML done
+	sta [emu_return_addr],y
+	iny
+	lda #<done
+	sta [emu_return_addr],y
+	iny
+	lda #>done
+	sta [emu_return_addr],y
+	iny
+	phk
+	pla
+	sta [emu_return_addr],y
+	acc16i16
 	rts
 .endscope
 

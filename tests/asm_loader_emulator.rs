@@ -16,6 +16,8 @@ const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
 const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x55;
 
 const O65_CPU_65816: u16 = 0x8000;
+const O65_CPU2_65C02: u16 = 0x0010;
+const O65_CPU2_65816_EMU: u16 = 0x0050;
 const O65_SIZE_32BIT: u16 = 0x2000;
 const O65_FTYPE_OBJ: u16 = 0x1000;
 const O65_ADDR_SIMPLE: u16 = 0x0800;
@@ -263,7 +265,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1758, "loader grew to {size} bytes");
+    assert!(size <= 1898, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -297,20 +299,35 @@ fn rejects_non_simple_addressing() {
 }
 
 #[test]
-fn rejects_chained_files() {
-    let mut o65 = O65::new(vec![0x6b]);
-    o65.mode |= O65_CHAIN;
+fn enters_6502_programs_in_emulation_mode() {
+    let mut o65 = O65::new(vec![0x60]);
+    o65.mode &= !O65_CPU_65816;
 
-    let (cpu, memory) = run_loader(&o65.build());
+    let (cpu, memory) = run_loader_at(0x03_2000, &o65.build());
 
-    assert_eq!(memory.byte(ZP_STATUS), 0x06);
-    assert_eq!(cpu.c() & 0x00ff, 0x0006);
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(cpu.c() & 0x00ff, 0x0000);
+    assert!(!cpu.p.e);
 }
 
 #[test]
-fn rejects_non_native_cpu_modes() {
+fn enters_65816_emulation_mode_programs_with_rts_return() {
     let mut o65 = O65::new(vec![0x60]);
     o65.mode &= !O65_CPU_65816;
+    o65.mode |= O65_CPU2_65816_EMU;
+
+    let (cpu, memory) = run_loader_at(0x03_4000, &o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(cpu.c() & 0x00ff, 0x0000);
+    assert!(!cpu.p.e);
+}
+
+#[test]
+fn rejects_unsupported_cpu2_modes() {
+    let mut o65 = O65::new(vec![0x60]);
+    o65.mode &= !O65_CPU_65816;
+    o65.mode |= O65_CPU2_65C02;
 
     let (cpu, memory) = run_loader(&o65.build());
 
@@ -327,6 +344,35 @@ fn rejects_malformed_header_option_length() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x09);
     assert_eq!(cpu.c() & 0x00ff, 0x0009);
+}
+
+#[test]
+fn relocates_chained_files_before_entering_first_image() {
+    let mut first = O65::new(vec![0x6b]);
+    first.mode |= O65_CHAIN;
+
+    let mut second = O65::new(vec![
+        0x6b, // The chain loader should not enter this image.
+        0x34, 0x12,
+    ]);
+    second.tbase = 0x1000;
+    second.text_relocs = vec![0x02, 0x80 | TEXT_SEGMENT];
+
+    let first_image = first.build();
+    let second_image = second.build();
+    let first_base = PROGRAM_ADDR + 27;
+    let second_base = PROGRAM_ADDR + first_image.len() + 27;
+    let mut chain = first_image;
+    chain.extend(second_image);
+
+    let (_cpu, memory) = run_loader(&chain);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.long24(ZP_ENTRY_ADDR), first_base as u32);
+    assert_eq!(
+        memory.word(second_base + 1),
+        ((second_base as u32 + 0x0234) & 0xffff) as u16
+    );
 }
 
 #[test]
