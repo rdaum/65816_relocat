@@ -18,6 +18,7 @@ O65_CPU_65816 = $8000
 O65_CPU_MASK = $8000
 O65_CPU2_65816_EMU = $0050
 O65_CPU2_MASK = $00f0
+O65_PAGE_RELOC = $4000
 O65_SIZE_32BIT = $2000
 O65_FTYPE_OBJ = $1000
 O65_ADDR_SIMPLE = $0800
@@ -37,6 +38,7 @@ O65_UNSUPPORTED_ALIGN = $07
 O65_UNSUPPORTED_CPU = $08
 O65_BAD_HEADER_OPTION = $09
 O65_RELOC_OUT_OF_BOUNDS = $0a
+O65_UNSUPPORTED_PAGE_RELOC = $0b
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -331,6 +333,11 @@ check_file_type:
 	bne fail_non_simple
 
 	lda mode
+	and #O65_PAGE_RELOC
+	cmp #O65_PAGE_RELOC
+	beq fail_page_reloc
+
+	lda mode
 	and #O65_SIZE_32BIT
 	cmp #O65_SIZE_32BIT
 	bne read_16_sizes
@@ -376,6 +383,12 @@ fail_non_simple:
 fail_unsupported_cpu:
 	acc8i16
 	lda #O65_UNSUPPORTED_CPU
+	sta status
+	acc16i16
+	bra done_load_header
+fail_page_reloc:
+	acc8i16
+	lda #O65_UNSUPPORTED_PAGE_RELOC
 	sta status
 	acc16i16
 done_load_header:

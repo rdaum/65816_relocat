@@ -93,6 +93,7 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x08`: unsupported CPU mode
 - `0x09`: malformed header option
 - `0x0a`: relocation target is outside the text/data segment being relocated
+- `0x0b`: pagewise relocation mode is unsupported
 
 ## Build
 
@@ -125,6 +126,7 @@ Coverage includes:
 - unsupported CPU2 rejection
 - 6502 and 65816-emulation-mode entry/return
 - malformed header option rejection
+- pagewise relocation rejection
 - alignment acceptance/rejection
 - 16-bit and 32-bit size fields
 - header options and external references
@@ -134,7 +136,7 @@ Coverage includes:
 - exported `main` / `_main` entry-point selection
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2080` bytes.
+loader is `2100` bytes.
 
 ## Remaining gaps / TODO
 
@@ -147,7 +149,7 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - Export scanning only uses `main` / `_main`; it does not expose a general
   symbol lookup API.
 - Header option payloads are not interpreted.
-- Pagewise relocation mode is not implemented.
+- Pagewise relocation mode is rejected rather than implemented.
 - Whole-image bounds and malformed-table truncation checks are still minimal.
 - Native 65816 programs must return with `RTL`; 6502/emulation-mode programs
   must return with `RTS`.

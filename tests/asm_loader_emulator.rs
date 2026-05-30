@@ -18,6 +18,7 @@ const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x5d;
 const O65_CPU_65816: u16 = 0x8000;
 const O65_CPU2_65C02: u16 = 0x0010;
 const O65_CPU2_65816_EMU: u16 = 0x0050;
+const O65_PAGE_RELOC: u16 = 0x4000;
 const O65_SIZE_32BIT: u16 = 0x2000;
 const O65_FTYPE_OBJ: u16 = 0x1000;
 const O65_ADDR_SIMPLE: u16 = 0x0800;
@@ -266,7 +267,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2080, "loader grew to {size} bytes");
+    assert!(size <= 2100, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -297,6 +298,17 @@ fn rejects_non_simple_addressing() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x05);
     assert_eq!(cpu.c() & 0x00ff, 0x0005);
+}
+
+#[test]
+fn rejects_pagewise_relocation_mode() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_PAGE_RELOC;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x0b);
+    assert_eq!(cpu.c() & 0x00ff, 0x000b);
 }
 
 #[test]
