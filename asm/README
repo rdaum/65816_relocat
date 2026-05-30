@@ -4,7 +4,5 @@ See: http://www.6502.org/users/andre/o65/
 
 TODO:
 	* Support exported labels (like "main"?)
-	* Look at the CPU2 flag, flip into emulation mode if
-	  necessary
 	* More error handling & sanity checking throughout.
 	* Do something with the header options.

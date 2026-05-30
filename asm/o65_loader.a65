@@ -14,6 +14,8 @@ RELOC_LOW = $20
 RELOC_SEGADDR = $c0
 RELOC_SEG = $a0
 
+O65_CPU_65816 = $8000
+O65_CPU_MASK = $8000
 O65_SIZE_32BIT = $2000
 O65_FTYPE_OBJ = $1000
 O65_ADDR_SIMPLE = $0800
@@ -31,6 +33,7 @@ O65_OBJECT_FILE = $04
 O65_NON_SIMPLE = $05
 O65_CHAINED_FILE = $06
 O65_UNSUPPORTED_ALIGN = $07
+O65_UNSUPPORTED_CPU = $08
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -238,6 +241,11 @@ good_magic:
 	jsr prg_next_word
 	sta mode
 
+	and #O65_CPU_MASK
+	cmp #O65_CPU_65816
+	bne fail_unsupported_cpu
+
+	lda mode
 	and #O65_FTYPE_OBJ
 	cmp #O65_FTYPE_OBJ
 	beq fail_object_file
@@ -298,6 +306,12 @@ fail_non_simple:
 fail_chained_file:
 	acc8i16
 	lda #O65_CHAINED_FILE
+	sta status
+	acc16i16
+	bra done_load_header
+fail_unsupported_cpu:
+	acc8i16
+	lda #O65_UNSUPPORTED_CPU
 	sta status
 	acc16i16
 done_load_header:

@@ -14,6 +14,7 @@ const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
 const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
 
+const O65_CPU_65816: u16 = 0x8000;
 const O65_SIZE_32BIT: u16 = 0x2000;
 const O65_FTYPE_OBJ: u16 = 0x1000;
 const O65_ADDR_SIMPLE: u16 = 0x0800;
@@ -87,7 +88,7 @@ struct O65 {
 impl O65 {
     fn new(text: Vec<u8>) -> Self {
         Self {
-            mode: O65_ADDR_SIMPLE,
+            mode: O65_CPU_65816 | O65_ADDR_SIMPLE,
             text,
             zbase: 0x000080,
             ..Self::default()
@@ -227,7 +228,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1306, "loader grew to {size} bytes");
+    assert!(size <= 1326, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -269,6 +270,17 @@ fn rejects_chained_files() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x06);
     assert_eq!(cpu.c() & 0x00ff, 0x0006);
+}
+
+#[test]
+fn rejects_non_native_cpu_modes() {
+    let mut o65 = O65::new(vec![0x60]);
+    o65.mode &= !O65_CPU_65816;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x08);
+    assert_eq!(cpu.c() & 0x00ff, 0x0008);
 }
 
 #[test]
