@@ -41,6 +41,7 @@ O65_BAD_HEADER_OPTION = $09
 O65_RELOC_OUT_OF_BOUNDS = $0a
 O65_UNRESOLVED_EXTERNAL = $0c
 O65_BAD_RELOC_TABLE = $0d
+O65_TRUNCATED_IMAGE = $0e
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -49,6 +50,7 @@ O65_BAD_RELOC_TABLE = $0d
 .org $00
   status:            .res 1  ; 0 if ok, otherwise some error code
   program:           .res 4  ; ptr to bottom of program bank @ start
+  image_end:         .res 4
   seg_base:          .res 4
 
   ; relocations working area
@@ -125,6 +127,7 @@ start:
 	;; set zero page to where the linker tells us it should be
 	lda #__ZEROPAGE_LOAD__
 	tcd
+	jsr init_loader_context
 
 	;; perform relocation
 	acc8i16
@@ -213,6 +216,26 @@ done:
 
 	rtl
 
+init_loader_context:
+.scope
+	lda symbol_table
+	ora symbol_table+2
+	bne read_context
+	stz image_end
+	stz image_end+2
+	rts
+read_context:
+	lda [symbol_table]
+	sta image_end
+	Inc32 symbol_table
+	Inc32 symbol_table
+	lda [symbol_table]
+	and #$00ff
+	sta image_end+2
+	Inc32 symbol_table
+	rts
+.endscope
+
 ;;; TODO this could probably be rewritten
 get_32_from_offset:
 .scope
@@ -244,6 +267,15 @@ get_32_from_offset:
 ;;; Then increment program to next position
 prg_next_byte:
 .scope
+	acc16i16
+	lda #1
+	jsr check_program_available
+	lda status
+	and #$00ff
+	beq read_byte
+	lda #0
+	rts
+read_byte:
 	acc8i8
 	lda [program]
 	tax
@@ -264,6 +296,15 @@ done:
 ;;; Then increment program to next position
 prg_next_word:
 .scope
+	acc16i16
+	lda #2
+	jsr check_program_available
+	lda status
+	and #$00ff
+	beq read_word
+	lda #0
+	rts
+read_word:
 	sec
 	acc16i16
 	lda [program]
@@ -278,6 +319,31 @@ no_carry:
 	txa
 done:
 	clc
+	rts
+.endscope
+
+check_program_available:
+.scope
+	sta R0
+	stz R0+2
+	lda image_end
+	ora image_end+2
+	beq done_check_program_available
+	Add32 program, R0, R1
+	lda image_end+2
+	cmp R1+2
+	bcc fail_truncated
+	bne done_check_program_available
+	lda image_end
+	cmp R1
+	bcc fail_truncated
+	bra done_check_program_available
+fail_truncated:
+	acc8i16
+	lda #O65_TRUNCATED_IMAGE
+	sta status
+	acc16i16
+done_check_program_available:
 	rts
 .endscope
 

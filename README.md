@@ -26,8 +26,8 @@ The situation is:
 - The caller passes the o65 program image address in registers:
   - `A`: low 16 bits of the image address
   - `X` low byte: bank byte of the image address
-  - `X` high byte: optional symbol table bank byte
-  - `Y`: optional symbol table low 16 bits
+  - `X` high byte: optional loader context bank byte
+  - `Y`: optional loader context low 16 bits
 - The loader relocates the image in place.
 - Native 65816 programs are entered with `RTL` semantics and are expected to
   return with `RTL`.
@@ -45,9 +45,10 @@ called through a long-return stack frame, so they exit with `RTL`. Plain 6502
 and `CPU2_65816_EMU` programs run in emulation mode and exit with `RTS` to a
 small native-mode return stub that the loader writes after the loaded image.
 
-If `Y` and the high byte of `X` point at a symbol table, unresolved external
-relocation entries are resolved by name against that table. The table format is
-a sequence of entries:
+If `Y` and the high byte of `X` point at a loader context, the first three
+bytes are an optional 24-bit image-end pointer used for bounds checks. The
+remaining bytes are a symbol table used to resolve unresolved external
+relocation entries by name. The symbol table format is a sequence of entries:
 
 ```text
 name\0 address-low address-high address-bank
@@ -83,6 +84,8 @@ The loader currently supports:
 - Text and data relocation tables.
 - Relocation target bounds checking against the text/data segment currently
   being relocated.
+- Optional image-end bounds checking for stream reads from header/list/table
+  data.
 - Pagewise relocation mode for `HIGH` relocation entries.
 - Exported global list scanning for `main` / `_main`.
 - Exported global publishing into the caller-supplied symbol table.
@@ -118,6 +121,7 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x0a`: relocation target is outside the text/data segment being relocated
 - `0x0c`: relocation references an unresolved external symbol
 - `0x0d`: malformed relocation table
+- `0x0e`: truncated image
 
 ## Build
 
@@ -157,13 +161,14 @@ Coverage includes:
 - external relocation resolution and unresolved external rejection
 - malformed external relocation index rejection
 - malformed exported-global segment rejection
+- truncated image rejection when an image-end pointer is supplied
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection and general export publishing
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2834` bytes.
+loader is `2968` bytes.
 
 ## Remaining gaps / TODO
 
@@ -172,7 +177,8 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
 - Header option payloads are not interpreted.
-- Whole-image bounds and malformed-table truncation checks are still minimal.
+- Whole-image bounds require the caller to supply an image-end pointer in the
+  loader context.
 
 ## Notes
 

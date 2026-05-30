@@ -12,9 +12,9 @@ const RETURN_ADDR: u16 = 0x1234;
 
 const ZP_STATUS: usize = ZP_ADDR;
 const ZP_PROGRAM: usize = ZP_ADDR + 1;
-const ZP_SEG_BASE: usize = ZP_ADDR + 5;
-const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
-const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x73;
+const ZP_SEG_BASE: usize = ZP_ADDR + 9;
+const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2f;
+const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x77;
 
 const O65_CPU_65816: u16 = 0x8000;
 const O65_CPU2_65C02: u16 = 0x0010;
@@ -226,25 +226,31 @@ fn run_loader(program: &[u8]) -> (Processor, Memory) {
 }
 
 fn run_loader_at(program_addr: usize, program: &[u8]) -> (Processor, Memory) {
-    run_loader_at_with_symbols(program_addr, program, 0, &[])
+    run_loader_at_with_context(program_addr, program, 0, &[])
 }
 
 fn run_loader_with_symbols(program: &[u8], symbol_table: &[u8]) -> (Processor, Memory) {
-    run_loader_at_with_symbols(PROGRAM_ADDR, program, SYMBOL_TABLE_ADDR, symbol_table)
+    let context = loader_context((PROGRAM_ADDR + program.len()) as u32, symbol_table);
+    run_loader_at_with_context(PROGRAM_ADDR, program, SYMBOL_TABLE_ADDR, &context)
 }
 
-fn run_loader_at_with_symbols(
+fn run_loader_with_image_end(program: &[u8], image_end: usize) -> (Processor, Memory) {
+    let context = loader_context(image_end as u32, &symbol_table(&[]));
+    run_loader_at_with_context(PROGRAM_ADDR, program, SYMBOL_TABLE_ADDR, &context)
+}
+
+fn run_loader_at_with_context(
     program_addr: usize,
     program: &[u8],
-    symbol_table_addr: usize,
-    symbol_table: &[u8],
+    context_addr: usize,
+    context: &[u8],
 ) -> (Processor, Memory) {
     let loader = build_loader();
     let mut memory = Memory::new();
     memory.load(LOADER_ADDR, &loader);
     memory.load(program_addr, program);
-    if !symbol_table.is_empty() {
-        memory.load(symbol_table_addr, symbol_table);
+    if !context.is_empty() {
+        memory.load(context_addr, context);
     }
     for field_offset in (0..36).step_by(4) {
         memory.write(ZP_HEADER_TABLE + field_offset + 2, 0xcc);
@@ -260,9 +266,9 @@ fn run_loader_at_with_symbols(
     cpu.a = (program_addr & 0xff) as u8;
     cpu.b = ((program_addr >> 8) & 0xff) as u8;
     cpu.xl = ((program_addr >> 16) & 0xff) as u8;
-    cpu.xh = ((symbol_table_addr >> 16) & 0xff) as u8;
-    cpu.yl = (symbol_table_addr & 0xff) as u8;
-    cpu.yh = ((symbol_table_addr >> 8) & 0xff) as u8;
+    cpu.xh = ((context_addr >> 16) & 0xff) as u8;
+    cpu.yl = (context_addr & 0xff) as u8;
+    cpu.yh = ((context_addr >> 8) & 0xff) as u8;
 
     let return_minus_one = RETURN_ADDR.wrapping_sub(1).to_le_bytes();
     memory.write(0x01fd, return_minus_one[0]);
@@ -292,6 +298,15 @@ fn symbol_table(entries: &[(&[u8], u32)]) -> Vec<u8> {
     out
 }
 
+fn loader_context(image_end: u32, symbol_table: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push((image_end & 0xff) as u8);
+    out.push(((image_end >> 8) & 0xff) as u8);
+    out.push(((image_end >> 16) & 0xff) as u8);
+    out.extend(symbol_table);
+    out
+}
+
 fn seg_base(memory: &Memory) -> usize {
     memory.long24(ZP_SEG_BASE) as usize
 }
@@ -299,7 +314,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2834, "loader grew to {size} bytes");
+    assert!(size <= 2968, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -418,6 +433,16 @@ fn rejects_malformed_header_option_length() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x09);
     assert_eq!(cpu.c() & 0x00ff, 0x0009);
+}
+
+#[test]
+fn rejects_truncated_image_when_end_pointer_is_supplied() {
+    let program = O65::new(vec![0x6b]).build();
+
+    let (cpu, memory) = run_loader_with_image_end(&program, PROGRAM_ADDR + program.len() - 1);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x0e);
+    assert_eq!(cpu.c() & 0x00ff, 0x000e);
 }
 
 #[test]
@@ -816,8 +841,11 @@ fn publishes_exports_for_later_chained_external_relocations() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x00);
     assert_eq!(memory.word(second_base + 1), (first_base + 1) as u16);
-    assert_eq!(&memory.bytes[SYMBOL_TABLE_ADDR..SYMBOL_TABLE_ADDR + 5], b"puts\0");
-    assert_eq!(memory.long24(SYMBOL_TABLE_ADDR + 5), (first_base + 1) as u32);
+    assert_eq!(
+        &memory.bytes[SYMBOL_TABLE_ADDR + 3..SYMBOL_TABLE_ADDR + 8],
+        b"puts\0"
+    );
+    assert_eq!(memory.long24(SYMBOL_TABLE_ADDR + 8), (first_base + 1) as u32);
 }
 
 #[test]
