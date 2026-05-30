@@ -703,6 +703,12 @@ read_global_value_16:
 	PrgNext16To R0
 	stz R0+2
 maybe_set_entry:
+	jsr check_export_segment
+	acc8i16
+	lda status
+	cmp #0
+	acc16i16
+	bne done_load_exported_globals
 	jsr append_exported_symbol
 	acc8i16
 	lda segment
@@ -741,6 +747,30 @@ dec_global_count_low:
 	dec num_references
 	brl global_loop
 done_load_exported_globals:
+	rts
+.endscope
+
+check_export_segment:
+.scope
+	acc8i16
+	lda segment
+	acc16i16
+	and #$00ff
+	cmp #ABS_SEGMENT
+	beq export_segment_ok
+	cmp #TEXT_SEGMENT
+	beq export_segment_ok
+	cmp #DATA_SEGMENT
+	beq export_segment_ok
+	cmp #BSS_SEGMENT
+	beq export_segment_ok
+	cmp #ZP_SEGMENT
+	beq export_segment_ok
+	acc8i16
+	lda #O65_BAD_RELOC_TABLE
+	sta status
+	acc16i16
+export_segment_ok:
 	rts
 .endscope
 

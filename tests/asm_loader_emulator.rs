@@ -299,7 +299,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2778, "loader grew to {size} bytes");
+    assert!(size <= 2834, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -578,6 +578,21 @@ fn prefers_exported_under_main_over_main() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x00);
     assert_eq!(memory.long24(ZP_ENTRY_ADDR), (base + 2) as u32);
+}
+
+#[test]
+fn rejects_exported_global_with_invalid_segment() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.exports = vec![Export {
+        name: b"bad".to_vec(),
+        segment: 6,
+        value: 0,
+    }];
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x0d);
+    assert_eq!(cpu.c() & 0x00ff, 0x000d);
 }
 
 #[test]

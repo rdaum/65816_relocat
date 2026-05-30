@@ -156,13 +156,14 @@ Coverage includes:
 - header options and external references
 - external relocation resolution and unresolved external rejection
 - malformed external relocation index rejection
+- malformed exported-global segment rejection
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection and general export publishing
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2778` bytes.
+loader is `2834` bytes.
 
 ## Remaining gaps / TODO
 
