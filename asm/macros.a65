@@ -59,7 +59,7 @@
 .endif  
 	sta DEST
 	bcc no_carry
-	inc DEST
+	inc DEST+2
 no_carry:
 .if (.match (.left (1, {OP1}), #))
 	lda #.hiword(.right (.tcount ({OP1})-1, {OP1}))
@@ -90,7 +90,7 @@ no_carry:
 .endif  
 	sta DEST
 	bcs no_carry
-	dec DEST
+	dec DEST+2
  no_carry:
 	sec
 .if (.match (.left (1, {OP1}), #))
@@ -105,4 +105,3 @@ no_carry:
 .endif  
 	sta DEST+2
 .endmacro
-

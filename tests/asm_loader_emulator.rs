@@ -13,7 +13,7 @@ const ZP_STATUS: usize = ZP_ADDR;
 const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
 const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
-const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x55;
+const ZP_ENTRY_ADDR: usize = ZP_ADDR + 0x5d;
 
 const O65_CPU_65816: u16 = 0x8000;
 const O65_CPU2_65C02: u16 = 0x0010;
@@ -28,6 +28,7 @@ const O65_ALIGN_4: u16 = 0x0002;
 const O65_ALIGN_256: u16 = 0x0003;
 
 const TEXT_SEGMENT: u8 = 2;
+const DATA_SEGMENT: u8 = 3;
 
 #[derive(Clone)]
 struct Memory {
@@ -265,7 +266,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1898, "loader grew to {size} bytes");
+    assert!(size <= 2080, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -529,6 +530,24 @@ fn applies_word_relocation_in_text_segment() {
 }
 
 #[test]
+fn applies_word_relocation_in_data_segment() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.data = vec![0x34, 0x12];
+    o65.dbase = 0x2000;
+    o65.data_relocs = vec![0x01, 0x80 | DATA_SEGMENT];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+    let data_base = base + 1;
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(
+        memory.word(data_base),
+        ((data_base as u32 + 0x1234 - 0x2000) & 0xffff) as u16
+    );
+}
+
+#[test]
 fn applies_low_high_and_segaddr_relocations() {
     let mut o65 = O65::new(vec![
         0x6b, // RTL
@@ -557,6 +576,19 @@ fn applies_low_high_and_segaddr_relocations() {
         (((base + 0x2200) & 0x0000_ff00) >> 8) as u8
     );
     assert_eq!(memory.long24(base as usize + 3), base + 0x2256);
+}
+
+#[test]
+fn rejects_relocation_past_segment_end() {
+    let mut o65 = O65::new(vec![0x6b, 0x34]);
+    o65.text_relocs = vec![0x02, 0x80 | TEXT_SEGMENT];
+
+    let (cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x0a);
+    assert_eq!(cpu.c() & 0x00ff, 0x000a);
+    assert_eq!(memory.byte(base + 1), 0x34);
 }
 
 #[test]

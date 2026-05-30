@@ -36,6 +36,7 @@ O65_NON_SIMPLE = $05
 O65_UNSUPPORTED_ALIGN = $07
 O65_UNSUPPORTED_CPU = $08
 O65_BAD_HEADER_OPTION = $09
+O65_RELOC_OUT_OF_BOUNDS = $0a
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -53,6 +54,8 @@ O65_BAD_HEADER_OPTION = $09
   segment:           .res 1
   cur_segment_base:  .res 4  ; the current segment base for reloc
   new_segment_base:  .res 4  ; desired segment base
+  reloc_base:        .res 4  ; text/data segment currently being relocated
+  reloc_len:         .res 4
   working_addr:      .res 4  ; where to stash relocated addresses
   working_byte:      .res 1  ;
   reloc_start:       .res 4
@@ -739,13 +742,13 @@ do_reloc:
 	lda offset
 	dec
 	clc
-	adc seg_base
+	adc reloc_base
 	sta reloc_start
 	bcc no_carry_offset
 	inc reloc_start+2
 no_carry_offset:
 	lda offset+2
-	adc seg_base+2
+	adc reloc_base+2
 	adc reloc_start+2
 	sta reloc_start+2
 
@@ -786,8 +789,12 @@ reloc_seg:
 reloc_segaddr:
 	cpx #RELOC_SEGADDR
 	bne reloc_low
-	jsr get_32_from_offset  ; get 32 bits of the segment address
+	lda [reloc_start]       ; SEGADDR is a 24-bit address in the segment.
+	sta working_addr
+	ldy #2
 	acc8i16
+	lda [reloc_start],y
+	sta working_addr+2
 	stz working_addr+3      ; throw away the highest byte
 	acc16i16
 	AdjustAddr              ; adjust it
@@ -851,6 +858,60 @@ done_do_reloc:
 	rts
 .endscope
 
+check_reloc_bounds:
+.scope
+	stz R0
+	stz R0+2
+
+	lda offset
+	ora offset+2
+	beq fail_out_of_bounds
+
+	acc8i16
+	lda type
+	cmp #RELOC_WORD
+	beq needs_two_bytes
+	cmp #RELOC_SEGADDR
+	beq needs_three_bytes
+	cmp #RELOC_LOW
+	beq compare_bounds
+	cmp #RELOC_HIGH
+	beq compare_bounds
+	cmp #RELOC_SEG
+	beq compare_bounds
+	acc16i16
+	rts
+needs_two_bytes:
+	acc16i16
+	lda #1
+	sta R0
+	bra compare_bounds_16
+needs_three_bytes:
+	acc16i16
+	lda #2
+	sta R0
+compare_bounds_16:
+	acc16i16
+compare_bounds:
+	acc16i16
+	Add32 offset, R0, R1
+	lda reloc_len+2
+	cmp R1+2
+	bcc fail_out_of_bounds
+	bne done_check_reloc_bounds
+	lda reloc_len
+	cmp R1
+	bcc fail_out_of_bounds
+	bra done_check_reloc_bounds
+fail_out_of_bounds:
+	acc8i16
+	lda #O65_RELOC_OUT_OF_BOUNDS
+	sta status
+	acc16i16
+done_check_reloc_bounds:
+	rts
+.endscope
+
 ;;; Scan for and perform relocations.
 perform_relocations:
 .scope
@@ -899,6 +960,18 @@ get_type_and_segment:
 	and #$0f
 	sta segment
 	acc16i16
+	jsr check_reloc_bounds
+	acc8i16
+	lda status
+	cmp #0
+	acc16i16
+	beq relocation_bounds_ok
+	brl relocations_failed
+relocation_bounds_ok:
+	acc8i16
+	lda segment
+	acc16i16
+	and #$00ff
 start_text_seg_reloc:
 	cmp #TEXT_SEGMENT
 	bne start_data_seg_reloc
@@ -911,7 +984,7 @@ start_data_seg_reloc:
 	cmp #DATA_SEGMENT
 	bne start_zp_seg_reloc
 	;; do data segment
-	Store32 tbase, cur_segment_base
+	Store32 dbase, cur_segment_base
 	clc
 	Add32 seg_base, tlen, new_segment_base
 	jsr do_reloc
@@ -938,6 +1011,7 @@ unknown_segment_type:
 	lda #O65_UNKNOWN_RELOC_SEGMENT
 	sta status
 	acc16i16
+relocations_failed:
 done_perform_relocations:
 	rts
 .endscope
@@ -955,6 +1029,10 @@ load_program:
 	stz cur_segment_base+2
 	stz new_segment_base
 	stz new_segment_base+2
+	stz reloc_base
+	stz reloc_base+2
+	stz reloc_len
+	stz reloc_len+2
 	stz working_addr
 	stz working_addr+2
 	acc8i16
@@ -1018,6 +1096,8 @@ step_load_external_references:
 	beq step_perform_text_relocations
 	brl done_load_program
 step_perform_text_relocations:
+	Store32 seg_base, reloc_base
+	Store32 tlen, reloc_len
 	jsr perform_relocations     ; perform text seg relocations
 	acc8i16
 	clc
@@ -1025,8 +1105,10 @@ step_perform_text_relocations:
 	cmp #0
 	acc16i16
 	beq step_perform_data_relocations
-	bra done_load_program
+	brl done_load_program
 step_perform_data_relocations:
+	Add32 seg_base, tlen, reloc_base
+	Store32 dlen, reloc_len
 	jsr perform_relocations
 	acc8i16
 	clc

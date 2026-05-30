@@ -60,6 +60,8 @@ The loader currently supports:
 - Undefined/external reference list skipping.
 - Chained executable loading.
 - Text and data relocation tables.
+- Relocation target bounds checking against the text/data segment currently
+  being relocated.
 - Exported global list scanning for `main` / `_main`.
 - BSS clearing when the `BSSZERO` mode bit is set.
 - Alignment checking for 2-byte, 4-byte, and 256-byte alignment requests.
@@ -90,6 +92,7 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x07`: requested alignment is not satisfied by the in-place segment start
 - `0x08`: unsupported CPU mode
 - `0x09`: malformed header option
+- `0x0a`: relocation target is outside the text/data segment being relocated
 
 ## Build
 
@@ -126,11 +129,12 @@ Coverage includes:
 - 16-bit and 32-bit size fields
 - header options and external references
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
+- data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `1898` bytes.
+loader is `2080` bytes.
 
 ## Remaining gaps / TODO
 
@@ -144,7 +148,7 @@ This is still a not a complete o65 runtime loader. Known gaps include:
   symbol lookup API.
 - Header option payloads are not interpreted.
 - Pagewise relocation mode is not implemented.
-- Memory bounds and malformed-table checks are still minimal.
+- Whole-image bounds and malformed-table truncation checks are still minimal.
 - Native 65816 programs must return with `RTL`; 6502/emulation-mode programs
   must return with `RTS`.
 
