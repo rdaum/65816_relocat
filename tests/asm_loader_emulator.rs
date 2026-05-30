@@ -299,7 +299,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2365, "loader grew to {size} bytes");
+    assert!(size <= 2710, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -730,6 +730,41 @@ fn resolves_external_word_relocation_from_symbol_table() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x00);
     assert_eq!(memory.word(base + 1), 0x3456);
+}
+
+#[test]
+fn publishes_exports_for_later_chained_external_relocations() {
+    let mut first = O65::new(vec![0x6b, 0xea]);
+    first.mode |= O65_CHAIN;
+    first.exports = vec![Export {
+        name: b"puts".to_vec(),
+        segment: TEXT_SEGMENT,
+        value: 1,
+    }];
+
+    let mut second = O65::new(vec![0x6b, 0x00, 0x00]);
+    second.external_refs = vec![b"puts".to_vec()];
+    second.text_relocs = vec![
+        0x02,
+        0x80, // WORD relocation against undefined segment 0.
+        0x00,
+        0x00,
+    ];
+
+    let first_image = first.build();
+    let second_image = second.build();
+    let first_base = PROGRAM_ADDR + 27;
+    let second_base = PROGRAM_ADDR + first_image.len() + 27;
+    let mut chain = first_image;
+    chain.extend(second_image);
+    let symbols = symbol_table(&[]);
+
+    let (_cpu, memory) = run_loader_with_symbols(&chain, &symbols);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.word(second_base + 1), (first_base + 1) as u16);
+    assert_eq!(&memory.bytes[SYMBOL_TABLE_ADDR..SYMBOL_TABLE_ADDR + 5], b"puts\0");
+    assert_eq!(memory.long24(SYMBOL_TABLE_ADDR + 5), (first_base + 1) as u32);
 }
 
 #[test]

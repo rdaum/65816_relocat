@@ -37,6 +37,8 @@ The situation is:
   segment start.
 - If an exported text symbol named `main` or `_main` exists, that symbol is used
   as the entry point. `_main` takes priority over `main`.
+- If a symbol table is supplied, exported globals are appended to it as
+  resolved 24-bit runtime addresses.
 
 The return instruction is part of the loader ABI. Native 65816 programs are
 called through a long-return stack frame, so they exit with `RTL`. Plain 6502
@@ -82,6 +84,7 @@ The loader currently supports:
 - Relocation target bounds checking against the text/data segment currently
   being relocated.
 - Exported global list scanning for `main` / `_main`.
+- Exported global publishing into the caller-supplied symbol table.
 - BSS clearing when the `BSSZERO` mode bit is set.
 - Alignment checking for 2-byte, 4-byte, and 256-byte alignment requests.
 - Relocation types:
@@ -154,10 +157,10 @@ Coverage includes:
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
-- exported `main` / `_main` entry-point selection
+- exported `main` / `_main` entry-point selection and general export publishing
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2365` bytes.
+loader is `2710` bytes.
 
 ## Remaining gaps / TODO
 
@@ -165,8 +168,6 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
-- Export scanning only uses `main` / `_main`; it does not expose a general
-  symbol lookup API.
 - Header option payloads are not interpreted.
 - Pagewise relocation mode is rejected rather than implemented.
 - Whole-image bounds and malformed-table truncation checks are still minimal.

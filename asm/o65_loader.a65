@@ -7,6 +7,7 @@ TEXT_SEGMENT = 2
 DATA_SEGMENT = 3
 BSS_SEGMENT = 4
 ZP_SEGMENT = 5
+ABS_SEGMENT = 1
 
 RELOC_WORD = $80
 RELOC_HIGH = $40
@@ -580,6 +581,7 @@ global_loop:
 	jmp done_load_exported_globals
 
 start_global_entry:
+	Store32 program, name_ptr
 	acc8i16
 	stz name_pos
 	lda #$03
@@ -709,6 +711,7 @@ read_global_value_16:
 	PrgNext16To R0
 	stz R0+2
 maybe_set_entry:
+	jsr append_exported_symbol
 	acc8i16
 	lda segment
 	cmp #TEXT_SEGMENT
@@ -746,6 +749,107 @@ dec_global_count_low:
 	dec num_references
 	brl global_loop
 done_load_exported_globals:
+	rts
+.endscope
+
+append_exported_symbol:
+.scope
+	lda symbol_table
+	ora symbol_table+2
+	bne start_append
+	rts
+start_append:
+	Store32 symbol_table, symbol_ptr
+find_symbol_table_end:
+	lda [symbol_ptr]
+	and #$00ff
+	beq copy_name
+skip_name:
+	lda [symbol_ptr]
+	and #$00ff
+	beq skip_value
+	Inc32 symbol_ptr
+	bra skip_name
+skip_value:
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	Inc32 symbol_ptr
+	bra find_symbol_table_end
+copy_name:
+	Store32 name_ptr, R1
+copy_name_byte:
+	lda [R1]
+	and #$00ff
+	acc8i16
+	sta [symbol_ptr]
+	acc16i16
+	Inc32 symbol_ptr
+	lda [R1]
+	and #$00ff
+	beq write_value
+	Inc32 R1
+	bra copy_name_byte
+write_value:
+	jsr exported_runtime_addr
+	lda working_addr
+	acc8i16
+	sta [symbol_ptr]
+	acc16i16
+	Inc32 symbol_ptr
+	xba
+	acc8i16
+	sta [symbol_ptr]
+	acc16i16
+	Inc32 symbol_ptr
+	lda working_addr+2
+	acc8i16
+	sta [symbol_ptr]
+	stz working_byte
+	Inc32 symbol_ptr
+	lda working_byte
+	sta [symbol_ptr]
+	acc16i16
+	rts
+.endscope
+
+exported_runtime_addr:
+.scope
+	acc8i16
+	lda segment
+	acc16i16
+	and #$00ff
+	cmp #TEXT_SEGMENT
+	beq text_export
+	cmp #DATA_SEGMENT
+	beq data_export
+	cmp #BSS_SEGMENT
+	beq bss_export
+	cmp #ZP_SEGMENT
+	beq zp_export
+	cmp #ABS_SEGMENT
+	bne unknown_export_segment
+	brl abs_export
+unknown_export_segment:
+	Store32 #$00000000, working_addr
+	rts
+text_export:
+	Add32 seg_base, R0, working_addr
+	rts
+data_export:
+	Add32 seg_base, tlen, working_addr
+	Add32 working_addr, R0, working_addr
+	rts
+bss_export:
+	Add32 seg_base, tlen, working_addr
+	Add32 working_addr, dlen, working_addr
+	Add32 working_addr, R0, working_addr
+	rts
+zp_export:
+	Add32 zbase, R0, working_addr
+	rts
+abs_export:
+	Store32 R0, working_addr
 	rts
 .endscope
 
