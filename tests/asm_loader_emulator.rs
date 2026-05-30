@@ -12,6 +12,7 @@ const RETURN_ADDR: u16 = 0x1234;
 const ZP_STATUS: usize = ZP_ADDR;
 const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
+const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
 
 #[derive(Clone)]
 struct Memory {
@@ -182,6 +183,10 @@ fn run_loader(program: &[u8]) -> (Processor, Memory) {
     let mut memory = Memory::new();
     memory.load(LOADER_ADDR, &loader);
     memory.load(PROGRAM_ADDR, program);
+    for field_offset in (0..36).step_by(4) {
+        memory.write(ZP_HEADER_TABLE + field_offset + 2, 0xcc);
+        memory.write(ZP_HEADER_TABLE + field_offset + 3, 0xcc);
+    }
 
     let mut cpu = Processor::new();
     cpu.p = StatusRegister::from_byte(0x00, false);
@@ -207,6 +212,12 @@ fn run_loader(program: &[u8]) -> (Processor, Memory) {
 
 fn seg_base(memory: &Memory) -> usize {
     memory.long24(ZP_SEG_BASE) as usize
+}
+
+#[test]
+fn loader_stays_small() {
+    let size = build_loader().len();
+    assert!(size <= 1164, "loader grew to {size} bytes");
 }
 
 #[test]

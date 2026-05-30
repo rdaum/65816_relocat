@@ -228,26 +228,31 @@ good_magic:
 	cmp #$2000
 	bne read_16_sizes
 
-	PrgNext32To tbase
-	PrgNext32To tlen
-	PrgNext32To dbase
-	PrgNext32To dlen
-	PrgNext32To bbase
-	PrgNext32To blen
-	PrgNext32To zbase
-	PrgNext32To zlen
-	PrgNext32To stack
+	ldx #0
+read_32_sizes:
+	phx
+	jsr prg_next_word
+	plx
+	sta tbase,x
+	inx
+	inx
+	cpx #36
+	bne read_32_sizes
 	bra done_load_header
 read_16_sizes:
-	PrgNext16To tbase
-	PrgNext16To tlen
-	PrgNext16To dbase
-	PrgNext16To dlen
-	PrgNext16To bbase
-	PrgNext16To blen
-	PrgNext16To zbase
-	PrgNext16To zlen
-	PrgNext16To stack
+	ldx #0
+read_16_size:
+	phx
+	jsr prg_next_word
+	plx
+	sta tbase,x
+	stz tbase+2,x
+	inx
+	inx
+	inx
+	inx
+	cpx #36
+	bne read_16_size
 done_load_header:
 	rts
 .endscope
