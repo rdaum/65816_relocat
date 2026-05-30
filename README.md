@@ -5,3 +5,12 @@ Format described here: http://www.6502.org/users/andre/o65/
 
    * asm/* - version written in 65816 assembler, for ca65
    * wdc_c/* - version written for the WDC C compiler
+
+## Tests
+
+The assembly loader has an emulator-backed Rust integration test suite. It
+requires `make`, `ca65`, and `ld65` from cc65 on `PATH`.
+
+```sh
+cargo test
+```

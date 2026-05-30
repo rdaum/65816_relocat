@@ -1,0 +1,6 @@
+target/
+asm/*.bin
+asm/*.lbl
+asm/*.lst
+asm/*.map
+asm/*.o

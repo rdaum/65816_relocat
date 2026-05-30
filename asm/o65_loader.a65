@@ -88,7 +88,7 @@ start:
 
   ;; We'll return to 'done' after the executable exits.
   phb
-  pea done
+  pea done-1
 
 	;; then jump to it by pushing address to stack and rtl
 	acc8i16
@@ -102,10 +102,11 @@ start:
 
 done:
   acc16i16
-  lda status    ;  return the status back to the caller in A
 	pld
 	ply
 	plx
+	pla
+  lda f:__ZEROPAGE_LOAD__ + status    ;  return the status back to the caller in A
 
 
 	rtl
@@ -298,12 +299,19 @@ read_num_refs_16:
 	PrgNext16To num_references
 eat_references_loop:
 	lda num_references
+	ora num_references+2
 	cmp #0
 	beq done_load_external_references
-	inc num_references
+read_reference:
 	jsr prg_next_byte
 	cmp #0
-	beq eat_references_loop
+	bne read_reference
+	lda num_references
+	bne dec_reference_count
+	dec num_references+2
+dec_reference_count:
+	dec num_references
+	bra eat_references_loop
 done_load_external_references:
 	rts
 .endscope
