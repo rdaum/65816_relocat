@@ -267,7 +267,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2100, "loader grew to {size} bytes");
+    assert!(size <= 2115, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -660,6 +660,25 @@ fn skips_header_options_and_external_references() {
         memory.word(base + 1),
         ((base as u32 + 0x5678) & 0xffff) as u16
     );
+}
+
+#[test]
+fn rejects_unresolved_external_relocation() {
+    let mut o65 = O65::new(vec![0x6b, 0x34, 0x12]);
+    o65.external_refs = vec![b"puts".to_vec()];
+    o65.text_relocs = vec![
+        0x02,
+        0x80, // WORD relocation against undefined segment 0.
+        0x00,
+        0x00,
+    ];
+
+    let (cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x0c);
+    assert_eq!(cpu.c() & 0x00ff, 0x000c);
+    assert_eq!(memory.word(base + 1), 0x1234);
 }
 
 #[test]

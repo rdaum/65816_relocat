@@ -39,6 +39,7 @@ O65_UNSUPPORTED_CPU = $08
 O65_BAD_HEADER_OPTION = $09
 O65_RELOC_OUT_OF_BOUNDS = $0a
 O65_UNSUPPORTED_PAGE_RELOC = $0b
+O65_UNRESOLVED_EXTERNAL = $0c
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -985,6 +986,8 @@ relocation_bounds_ok:
 	lda segment
 	acc16i16
 	and #$00ff
+	bne start_text_seg_reloc
+	brl unresolved_external
 start_text_seg_reloc:
 	cmp #TEXT_SEGMENT
 	bne start_data_seg_reloc
@@ -1019,6 +1022,12 @@ start_bss_seg_reloc:
 	Add32 new_segment_base, dlen, new_segment_base
 	jsr do_reloc
 	jmp continue_relocations
+unresolved_external:
+	acc8i16
+	lda #O65_UNRESOLVED_EXTERNAL
+	sta status
+	acc16i16
+	bra relocations_failed
 unknown_segment_type:
 	acc8i16
 	lda #O65_UNKNOWN_RELOC_SEGMENT

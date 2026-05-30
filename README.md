@@ -62,7 +62,8 @@ The loader currently supports:
 - Simple addressing mode.
 - 16-bit and 32-bit o65 size fields.
 - Header option scanning, with structural validation of option lengths.
-- Undefined/external reference list skipping.
+- Undefined/external reference list scanning. Relocation entries that require an
+  external symbol are rejected as unresolved.
 - Chained executable loading.
 - Text and data relocation tables.
 - Relocation target bounds checking against the text/data segment currently
@@ -99,6 +100,7 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x09`: malformed header option
 - `0x0a`: relocation target is outside the text/data segment being relocated
 - `0x0b`: pagewise relocation mode is unsupported
+- `0x0c`: relocation references an unresolved external symbol
 
 ## Build
 
@@ -135,13 +137,14 @@ Coverage includes:
 - alignment acceptance/rejection
 - 16-bit and 32-bit size fields
 - header options and external references
+- unresolved external relocation rejection
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2100` bytes.
+loader is `2115` bytes.
 
 ## Remaining gaps / TODO
 
@@ -149,8 +152,8 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
-- Undefined external references are skipped, not resolved through a late-binding
-  symbol table.
+- Undefined external references are not resolved through a late-binding symbol
+  table.
 - Export scanning only uses `main` / `_main`; it does not expose a general
   symbol lookup API.
 - Header option payloads are not interpreted.
