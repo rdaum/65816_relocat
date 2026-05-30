@@ -312,6 +312,17 @@ fn rejects_pagewise_relocation_mode() {
 }
 
 #[test]
+fn enters_native_65816_programs_with_rtl_return() {
+    let o65 = O65::new(vec![0x6b]);
+
+    let (cpu, memory) = run_loader_at(0x03_1000, &o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(cpu.c() & 0x00ff, 0x0000);
+    assert!(!cpu.p.e);
+}
+
+#[test]
 fn enters_6502_programs_in_emulation_mode() {
     let mut o65 = O65::new(vec![0x60]);
     o65.mode &= !O65_CPU_65816;

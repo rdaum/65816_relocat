@@ -36,6 +36,11 @@ The situation is:
 - If an exported text symbol named `main` or `_main` exists, that symbol is used
   as the entry point. `_main` takes priority over `main`.
 
+The return instruction is part of the loader ABI. Native 65816 programs are
+called through a long-return stack frame, so they exit with `RTL`. Plain 6502
+and `CPU2_65816_EMU` programs run in emulation mode and exit with `RTS` to a
+small native-mode return stub that the loader writes after the loaded image.
+
 The loader code address and direct-page workspace address are fixed at link
 time by `asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
 runtime.
@@ -124,7 +129,7 @@ Coverage includes:
 - chained-file loading
 - non-simple addressing rejection
 - unsupported CPU2 rejection
-- 6502 and 65816-emulation-mode entry/return
+- native 65816, 6502, and 65816-emulation-mode entry/return
 - malformed header option rejection
 - pagewise relocation rejection
 - alignment acceptance/rejection
@@ -151,8 +156,6 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - Header option payloads are not interpreted.
 - Pagewise relocation mode is rejected rather than implemented.
 - Whole-image bounds and malformed-table truncation checks are still minimal.
-- Native 65816 programs must return with `RTL`; 6502/emulation-mode programs
-  must return with `RTS`.
 
 ## Notes
 
