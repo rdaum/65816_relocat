@@ -5,4 +5,3 @@ See: http://www.6502.org/users/andre/o65/
 TODO:
 	* Support exported labels (like "main"?)
 	* More error handling & sanity checking throughout.
-	* Do something with the header options.

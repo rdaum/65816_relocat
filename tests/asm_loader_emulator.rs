@@ -228,7 +228,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1326, "loader grew to {size} bytes");
+    assert!(size <= 1340, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -281,6 +281,17 @@ fn rejects_non_native_cpu_modes() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x08);
     assert_eq!(cpu.c() & 0x00ff, 0x0008);
+}
+
+#[test]
+fn rejects_malformed_header_option_length() {
+    let mut program = O65::new(vec![0x6b]).build();
+    program[26] = 1;
+
+    let (cpu, memory) = run_loader(&program);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x09);
+    assert_eq!(cpu.c() & 0x00ff, 0x0009);
 }
 
 #[test]

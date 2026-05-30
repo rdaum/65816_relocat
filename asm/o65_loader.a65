@@ -34,6 +34,7 @@ O65_NON_SIMPLE = $05
 O65_CHAINED_FILE = $06
 O65_UNSUPPORTED_ALIGN = $07
 O65_UNSUPPORTED_CPU = $08
+O65_BAD_HEADER_OPTION = $09
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -329,6 +330,8 @@ start_loop:
 	bne start_header_option
 	bra done_load_header_options
 start_header_option:
+	cmp #2
+	bcc fail_bad_header_option
 	PrgNext8To otype      ; get type from program stream
 	acc8i16
 	dec olen
@@ -343,6 +346,12 @@ eat_header_bytes:
 	jsr prg_next_byte
 	bra read_header_option
 done_load_header_options:
+	acc16i16
+	rts
+fail_bad_header_option:
+	acc8i16
+	lda #O65_BAD_HEADER_OPTION
+	sta status
 	acc16i16
 	rts
 .endscope
