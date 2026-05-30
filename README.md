@@ -23,7 +23,9 @@ http://www.6502.org/users/andre/o65/
 The situation is:
 
 - The loader binary is linked to run at `$010000`.
-- The o65 program image is expected at `$030000`.
+- The caller passes the o65 program image address in registers:
+  - `A`: low 16 bits of the image address
+  - `X`: bank byte of the image address
 - The loader relocates the image in place.
 - It then jumps to the relocated program using native 65816 `RTL` semantics.
 - If no exported entry symbol is found, execution starts at the relocated text
@@ -31,8 +33,9 @@ The situation is:
 - If an exported text symbol named `main` or `_main` exists, that symbol is used
   as the entry point. `_main` takes priority over `main`.
 
-The addresses are currently build-time assumptions in `asm/o65_loader.a65`. If
-using this on a real hardware system, you would adjust them accordingly.
+The loader code address and direct-page workspace address are fixed by
+`asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
+runtime.
 
 ## Implemented o65 Support
 
@@ -120,7 +123,8 @@ loader is `1758` bytes.
 
 This is still a not a complete o65 runtime loader. Known gaps include:
 
-- The input image address and loader address are hardcoded.
+- The loader code address and direct-page workspace address are fixed at link
+  time by `asm/o65_loader.cfg`.
 - Chained files are rejected, not loaded in sequence.
 - 6502 and 65816-emulation-mode programs are rejected, not entered using a
   different calling convention.

@@ -89,7 +89,10 @@ O65_BAD_HEADER_OPTION = $09
 .code
 start:
 	acc16i16
-	pha			; X, Y, D for return
+	sta f:__ZEROPAGE_LOAD__ + program
+	pha			; A, X, Y, D for return/stack balance
+	txa
+	sta f:__ZEROPAGE_LOAD__ + program+2
 	phx
 	phy
 	phd
@@ -97,9 +100,6 @@ start:
 	;; set zero page to where the linker tells us it should be
 	lda #__ZEROPAGE_LOAD__
 	tcd
-
-	;; stash the address of the program
-	Store32 #$30000, program
 
 	;; perform relocation
 	jsr load_program

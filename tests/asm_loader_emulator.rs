@@ -217,10 +217,14 @@ fn build_loader() -> Vec<u8> {
 }
 
 fn run_loader(program: &[u8]) -> (Processor, Memory) {
+    run_loader_at(PROGRAM_ADDR, program)
+}
+
+fn run_loader_at(program_addr: usize, program: &[u8]) -> (Processor, Memory) {
     let loader = build_loader();
     let mut memory = Memory::new();
     memory.load(LOADER_ADDR, &loader);
-    memory.load(PROGRAM_ADDR, program);
+    memory.load(program_addr, program);
     for field_offset in (0..36).step_by(4) {
         memory.write(ZP_HEADER_TABLE + field_offset + 2, 0xcc);
         memory.write(ZP_HEADER_TABLE + field_offset + 3, 0xcc);
@@ -232,6 +236,10 @@ fn run_loader(program: &[u8]) -> (Processor, Memory) {
     cpu.dbr = 0x01;
     cpu.pc = 0x0000;
     cpu.s = 0x01fc;
+    cpu.a = (program_addr & 0xff) as u8;
+    cpu.b = ((program_addr >> 8) & 0xff) as u8;
+    cpu.xl = ((program_addr >> 16) & 0xff) as u8;
+    cpu.xh = 0;
 
     let return_minus_one = RETURN_ADDR.wrapping_sub(1).to_le_bytes();
     memory.write(0x01fd, return_minus_one[0]);
@@ -383,6 +391,21 @@ fn runs_minimal_program_and_records_segment_base() {
 }
 
 #[test]
+fn accepts_program_pointer_from_caller() {
+    let program_addr = 0x04_2000;
+    let program = O65::new(vec![0x6b]).build();
+
+    let (_cpu, memory) = run_loader_at(program_addr, &program);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(
+        memory.long24(ZP_PROGRAM),
+        (program_addr + program.len()) as u32
+    );
+    assert_eq!(seg_base(&memory), program_addr + 27);
+}
+
+#[test]
 fn starts_at_exported_main_when_present() {
     let mut o65 = O65::new(vec![0x00, 0x6b]);
     o65.exports = vec![Export {
@@ -413,7 +436,6 @@ fn starts_at_exported_under_main_when_present() {
     assert_eq!(memory.byte(ZP_STATUS), 0x00);
     assert_eq!(memory.long24(ZP_ENTRY_ADDR), (base + 1) as u32);
 }
-
 
 #[test]
 fn prefers_exported_under_main_over_main() {
