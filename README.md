@@ -36,14 +36,16 @@ The situation is:
 - If an exported text symbol named `main` or `_main` exists, that symbol is used
   as the entry point. `_main` takes priority over `main`.
 
-The loader code address and direct-page workspace address are fixed by
-`asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
+The loader code address and direct-page workspace address are fixed at link
+time by `asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
 runtime.
 
-That link-time placement is intentional: this loader is meant to be integrated
-as a resident OS/monitor service. Porting it to a different memory map should
-usually mean adjusting `asm/o65_loader.cfg`, not making the loader
-position-independent.
+That split is intentional. A resident OS/monitor service normally has a known
+address in the system memory map, and link-time placement keeps the loader
+small and straightforward. Porting it to a different memory map should usually
+mean adjusting `asm/o65_loader.cfg`; making the loader itself
+position-independent is a separate portability feature, not a requirement for
+the basic OS-resident use case.
 
 ## Implemented o65 Support
 
