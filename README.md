@@ -55,7 +55,8 @@ name\0 address-low address-high address-bank
 ```
 
 An empty name byte terminates the table. Symbol addresses are absolute 24-bit
-runtime addresses.
+runtime addresses. If the loader context pointer is zero, external symbol
+resolution and whole-image truncation checks are disabled.
 
 The loader code address and direct-page workspace address are fixed at link
 time by `asm/o65_loader.cfg`. The o65 image address is supplied by the caller at
@@ -177,8 +178,6 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
 - Header option payloads are not interpreted.
-- Whole-image bounds require the caller to supply an image-end pointer in the
-  loader context.
 
 ## Notes
 
