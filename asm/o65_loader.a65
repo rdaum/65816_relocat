@@ -14,9 +14,16 @@ RELOC_LOW = $20
 RELOC_SEGADDR = $c0
 RELOC_SEG = $a0
 
+O65_SIZE_32BIT = $2000
+O65_FTYPE_OBJ = $1000
+O65_ADDR_SIMPLE = $0800
+O65_BSSZERO = $0200
+
 O65_BAD_HEADER_MAGIC = $01
 O65_UNKNOWN_RELOC_SEGMENT = $02
 O65_UNKNOWN_RELOC_TYPE = $03
+O65_OBJECT_FILE = $04
+O65_NON_SIMPLE = $05
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -224,8 +231,18 @@ good_magic:
 	jsr prg_next_word
 	sta mode
 
-	and #$2000
-	cmp #$2000
+	and #O65_FTYPE_OBJ
+	cmp #O65_FTYPE_OBJ
+	beq fail_object_file
+
+	lda mode
+	and #O65_ADDR_SIMPLE
+	cmp #O65_ADDR_SIMPLE
+	bne fail_non_simple
+
+	lda mode
+	and #O65_SIZE_32BIT
+	cmp #O65_SIZE_32BIT
 	bne read_16_sizes
 
 	ldx #0
@@ -253,6 +270,18 @@ read_16_size:
 	inx
 	cpx #36
 	bne read_16_size
+	bra done_load_header
+fail_object_file:
+	acc8i16
+	lda #O65_OBJECT_FILE
+	sta status
+	acc16i16
+	bra done_load_header
+fail_non_simple:
+	acc8i16
+	lda #O65_NON_SIMPLE
+	sta status
+	acc16i16
 done_load_header:
 	rts
 .endscope
@@ -627,6 +656,10 @@ step_perform_data_relocations:
 	beq step_perform_bss_clear
 	bra done_load_program
 step_perform_bss_clear:
+	lda mode
+	and #O65_BSSZERO
+	cmp #O65_BSSZERO
+	bne done_load_program
 	Add32 seg_base, tlen, new_segment_base
 	Add32 new_segment_base, dlen, R0
 	Add32 R0, blen, R1

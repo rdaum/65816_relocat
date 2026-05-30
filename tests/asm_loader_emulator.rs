@@ -14,6 +14,11 @@ const ZP_PROGRAM: usize = ZP_ADDR + 1;
 const ZP_SEG_BASE: usize = ZP_ADDR + 5;
 const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
 
+const O65_SIZE_32BIT: u16 = 0x2000;
+const O65_FTYPE_OBJ: u16 = 0x1000;
+const O65_ADDR_SIMPLE: u16 = 0x0800;
+const O65_BSSZERO: u16 = 0x0200;
+
 #[derive(Clone)]
 struct Memory {
     bytes: Vec<u8>,
@@ -78,6 +83,7 @@ struct O65 {
 impl O65 {
     fn new(text: Vec<u8>) -> Self {
         Self {
+            mode: O65_ADDR_SIMPLE,
             text,
             zbase: 0x000080,
             ..Self::default()
@@ -217,7 +223,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1164, "loader grew to {size} bytes");
+    assert!(size <= 1214, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -226,6 +232,28 @@ fn returns_bad_header_status() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x01);
     assert_eq!(cpu.c() & 0x00ff, 0x0001);
+}
+
+#[test]
+fn rejects_object_files() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_FTYPE_OBJ;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x04);
+    assert_eq!(cpu.c() & 0x00ff, 0x0004);
+}
+
+#[test]
+fn rejects_non_simple_addressing() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode &= !O65_ADDR_SIMPLE;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x05);
+    assert_eq!(cpu.c() & 0x00ff, 0x0005);
 }
 
 #[test]
@@ -298,6 +326,7 @@ fn applies_low_high_and_segaddr_relocations() {
 #[test]
 fn clears_bss_after_segments() {
     let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_BSSZERO;
     o65.data = vec![0xaa, 0xbb];
     o65.blen = 4;
 
@@ -307,6 +336,22 @@ fn clears_bss_after_segments() {
     assert_eq!(memory.byte(ZP_STATUS), 0x00);
     assert_eq!(&memory.bytes[base + 1..base + 3], &[0xaa, 0xbb]);
     assert_eq!(&memory.bytes[base + 3..base + 7], &[0x00, 0x00, 0x00, 0x00]);
+}
+
+#[test]
+fn leaves_bss_storage_alone_without_bsszero() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.data = vec![0xaa, 0xbb];
+    o65.blen = 4;
+    o65.external_refs = vec![b"xy".to_vec()];
+    let program = o65.build();
+
+    let (_cpu, memory) = run_loader(&program);
+    let base = seg_base(&memory);
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(&memory.bytes[base + 1..base + 3], &[0xaa, 0xbb]);
+    assert_eq!(&memory.bytes[base + 3..base + 7], &[0x01, 0x00, b'x', b'y']);
 }
 
 #[test]
@@ -329,7 +374,7 @@ fn skips_header_options_and_external_references() {
 #[test]
 fn supports_32_bit_o65_size_fields() {
     let mut o65 = O65::new(vec![0x6b, 0x78, 0x56]);
-    o65.mode = 0x2000;
+    o65.mode |= O65_SIZE_32BIT;
     o65.tbase = 0x020000;
     o65.text_relocs = vec![0x02, 0x80 | 0x02];
 
