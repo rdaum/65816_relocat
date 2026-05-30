@@ -17,6 +17,7 @@ RELOC_SEG = $a0
 O65_SIZE_32BIT = $2000
 O65_FTYPE_OBJ = $1000
 O65_ADDR_SIMPLE = $0800
+O65_CHAIN = $0400
 O65_BSSZERO = $0200
 
 O65_BAD_HEADER_MAGIC = $01
@@ -24,6 +25,7 @@ O65_UNKNOWN_RELOC_SEGMENT = $02
 O65_UNKNOWN_RELOC_TYPE = $03
 O65_OBJECT_FILE = $04
 O65_NON_SIMPLE = $05
+O65_CHAINED_FILE = $06
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -236,6 +238,11 @@ good_magic:
 	beq fail_object_file
 
 	lda mode
+	and #O65_CHAIN
+	cmp #O65_CHAIN
+	beq fail_chained_file
+
+	lda mode
 	and #O65_ADDR_SIMPLE
 	cmp #O65_ADDR_SIMPLE
 	bne fail_non_simple
@@ -280,6 +287,12 @@ fail_object_file:
 fail_non_simple:
 	acc8i16
 	lda #O65_NON_SIMPLE
+	sta status
+	acc16i16
+	bra done_load_header
+fail_chained_file:
+	acc8i16
+	lda #O65_CHAINED_FILE
 	sta status
 	acc16i16
 done_load_header:

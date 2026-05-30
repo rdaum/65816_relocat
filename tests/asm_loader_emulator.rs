@@ -17,6 +17,7 @@ const ZP_HEADER_TABLE: usize = ZP_ADDR + 0x2b;
 const O65_SIZE_32BIT: u16 = 0x2000;
 const O65_FTYPE_OBJ: u16 = 0x1000;
 const O65_ADDR_SIMPLE: u16 = 0x0800;
+const O65_CHAIN: u16 = 0x0400;
 const O65_BSSZERO: u16 = 0x0200;
 
 #[derive(Clone)]
@@ -223,7 +224,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1214, "loader grew to {size} bytes");
+    assert!(size <= 1234, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -254,6 +255,17 @@ fn rejects_non_simple_addressing() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x05);
     assert_eq!(cpu.c() & 0x00ff, 0x0005);
+}
+
+#[test]
+fn rejects_chained_files() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_CHAIN;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x06);
+    assert_eq!(cpu.c() & 0x00ff, 0x0006);
 }
 
 #[test]
