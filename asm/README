@@ -4,7 +4,6 @@ See: http://www.6502.org/users/andre/o65/
 
 TODO:
 	* Support exported labels (like "main"?)
-	* Do something with 'align'?
 	* Look at the CPU2 flag, flip into emulation mode if
 	  necessary
 	* More error handling & sanity checking throughout.

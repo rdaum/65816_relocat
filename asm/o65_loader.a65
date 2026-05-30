@@ -19,6 +19,10 @@ O65_FTYPE_OBJ = $1000
 O65_ADDR_SIMPLE = $0800
 O65_CHAIN = $0400
 O65_BSSZERO = $0200
+O65_ALIGN_MASK = $0003
+O65_ALIGN_2 = $0001
+O65_ALIGN_4 = $0002
+O65_ALIGN_256 = $0003
 
 O65_BAD_HEADER_MAGIC = $01
 O65_UNKNOWN_RELOC_SEGMENT = $02
@@ -26,6 +30,7 @@ O65_UNKNOWN_RELOC_TYPE = $03
 O65_OBJECT_FILE = $04
 O65_NON_SIMPLE = $05
 O65_CHAINED_FILE = $06
+O65_UNSUPPORTED_ALIGN = $07
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -328,6 +333,42 @@ done_load_header_options:
 	rts
 .endscope
 
+;;; Verify that the in-place segment start already satisfies the requested
+;;; alignment. This loader cannot move the segment payload.
+check_alignment:
+.scope
+	lda mode
+	and #O65_ALIGN_MASK
+	cmp #O65_ALIGN_2
+	beq check_align_2
+	cmp #O65_ALIGN_4
+	beq check_align_4
+	cmp #O65_ALIGN_256
+	beq check_align_256
+	rts
+check_align_2:
+	lda program
+	and #$0001
+	beq done_check_alignment
+	bra fail_align
+check_align_4:
+	lda program
+	and #$0003
+	beq done_check_alignment
+	bra fail_align
+check_align_256:
+	lda program
+	and #$00ff
+	beq done_check_alignment
+fail_align:
+	acc8i16
+	lda #O65_UNSUPPORTED_ALIGN
+	sta status
+	acc16i16
+done_check_alignment:
+	rts
+.endscope
+
 ;;; Scan the external references from the program.
 ;;; Currently discards them.
 load_external_references:
@@ -614,6 +655,15 @@ step_load_header:
 	brl done_load_program
 step_load_header_options:
 	jsr load_header_options ; eat the header options
+	acc8i16
+	clc
+	lda status
+	cmp #0
+	acc16i16
+	beq step_check_alignment
+	brl done_load_program
+step_check_alignment:
+	jsr check_alignment
 	acc8i16
 	clc
 	lda status

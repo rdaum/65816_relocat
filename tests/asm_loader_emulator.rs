@@ -19,6 +19,9 @@ const O65_FTYPE_OBJ: u16 = 0x1000;
 const O65_ADDR_SIMPLE: u16 = 0x0800;
 const O65_CHAIN: u16 = 0x0400;
 const O65_BSSZERO: u16 = 0x0200;
+const O65_ALIGN_2: u16 = 0x0001;
+const O65_ALIGN_4: u16 = 0x0002;
+const O65_ALIGN_256: u16 = 0x0003;
 
 #[derive(Clone)]
 struct Memory {
@@ -224,7 +227,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 1234, "loader grew to {size} bytes");
+    assert!(size <= 1306, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -266,6 +269,53 @@ fn rejects_chained_files() {
 
     assert_eq!(memory.byte(ZP_STATUS), 0x06);
     assert_eq!(cpu.c() & 0x00ff, 0x0006);
+}
+
+#[test]
+fn rejects_unsatisfied_alignment() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_ALIGN_2;
+
+    let (cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x07);
+    assert_eq!(cpu.c() & 0x00ff, 0x0007);
+}
+
+#[test]
+fn accepts_aligned_word_segment_start() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_ALIGN_2;
+    o65.options = vec![b"x".to_vec()];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(seg_base(&memory) & 0x01, 0);
+}
+
+#[test]
+fn accepts_aligned_longword_segment_start() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_ALIGN_4;
+    o65.options = vec![b"abc".to_vec()];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(seg_base(&memory) & 0x03, 0);
+}
+
+#[test]
+fn accepts_aligned_page_segment_start() {
+    let mut o65 = O65::new(vec![0x6b]);
+    o65.mode |= O65_ALIGN_256;
+    o65.options = vec![vec![b'x'; 227]];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(seg_base(&memory) & 0xff, 0);
 }
 
 #[test]
