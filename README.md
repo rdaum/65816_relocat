@@ -117,6 +117,7 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x0a`: relocation target is outside the text/data segment being relocated
 - `0x0b`: pagewise relocation mode is unsupported
 - `0x0c`: relocation references an unresolved external symbol
+- `0x0d`: malformed relocation table
 
 ## Build
 
@@ -154,13 +155,14 @@ Coverage includes:
 - 16-bit and 32-bit size fields
 - header options and external references
 - external relocation resolution and unresolved external rejection
+- malformed external relocation index rejection
 - `WORD`, `HIGH`, `LOW`, and `SEGADDR` relocation behavior
 - data relocation table targeting
 - BSS clearing behavior with and without `BSSZERO`
 - exported `main` / `_main` entry-point selection and general export publishing
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2710` bytes.
+loader is `2750` bytes.
 
 ## Remaining gaps / TODO
 

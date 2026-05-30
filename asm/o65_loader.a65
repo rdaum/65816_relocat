@@ -41,6 +41,7 @@ O65_BAD_HEADER_OPTION = $09
 O65_RELOC_OUT_OF_BOUNDS = $0a
 O65_UNSUPPORTED_PAGE_RELOC = $0b
 O65_UNRESOLVED_EXTERNAL = $0c
+O65_BAD_RELOC_TABLE = $0d
 
 .import __ZEROPAGE_LOAD__    ; symbol defining the start of the ZP
 
@@ -85,6 +86,7 @@ O65_UNRESOLVED_EXTERNAL = $0c
   ; ext references working area
 
   num_references:    .res 4
+  external_count:     .res 4
   external_names:     .res 4
   external_index:     .res 2
   symbol_table:       .res 4
@@ -538,6 +540,7 @@ read_num_refs_16:
 	PrgNext16To num_references
 	stz num_references+2
 eat_references_start:
+	Store32 num_references, external_count
 	Store32 program, external_names
 eat_references_loop:
 	lda num_references
@@ -1223,6 +1226,12 @@ start_bss_seg_reloc:
 unresolved_external:
 	jsr prg_next_word
 	sta external_index
+	jsr check_external_index
+	acc8i16
+	lda status
+	cmp #0
+	acc16i16
+	bne relocations_failed
 	Store32 #$00000000, cur_segment_base
 	jsr resolve_external_symbol
 	acc8i16
@@ -1234,6 +1243,18 @@ unresolved_external:
 external_resolved:
 	jsr do_reloc
 	jmp continue_relocations
+check_external_index:
+	lda external_count+2
+	bne external_index_ok
+	lda external_index
+	cmp external_count
+	bcc external_index_ok
+	acc8i16
+	lda #O65_BAD_RELOC_TABLE
+	sta status
+	acc16i16
+external_index_ok:
+	rts
 unknown_segment_type:
 	acc8i16
 	lda #O65_UNKNOWN_RELOC_SEGMENT
