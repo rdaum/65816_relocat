@@ -299,7 +299,7 @@ fn seg_base(memory: &Memory) -> usize {
 #[test]
 fn loader_stays_small() {
     let size = build_loader().len();
-    assert!(size <= 2750, "loader grew to {size} bytes");
+    assert!(size <= 2778, "loader grew to {size} bytes");
 }
 
 #[test]
@@ -333,14 +333,32 @@ fn rejects_non_simple_addressing() {
 }
 
 #[test]
-fn rejects_pagewise_relocation_mode() {
-    let mut o65 = O65::new(vec![0x6b]);
+fn applies_pagewise_high_relocation() {
+    let mut o65 = O65::new(vec![0x6b, 0x12]);
     o65.mode |= O65_PAGE_RELOC;
+    o65.options = vec![vec![b'x'; 227]];
+    o65.text_relocs = vec![
+        0x02,
+        0x40 | TEXT_SEGMENT, // HIGH relocation, no low-byte payload in pagewise mode.
+    ];
+
+    let (_cpu, memory) = run_loader(&o65.build());
+    let base = seg_base(&memory) as u32;
+
+    assert_eq!(memory.byte(ZP_STATUS), 0x00);
+    assert_eq!(memory.byte(base as usize + 1), ((base + 0x1200) >> 8) as u8);
+}
+
+#[test]
+fn rejects_non_high_pagewise_relocation_entry() {
+    let mut o65 = O65::new(vec![0x6b, 0x34, 0x12]);
+    o65.mode |= O65_PAGE_RELOC;
+    o65.text_relocs = vec![0x02, 0x80 | TEXT_SEGMENT];
 
     let (cpu, memory) = run_loader(&o65.build());
 
-    assert_eq!(memory.byte(ZP_STATUS), 0x0b);
-    assert_eq!(cpu.c() & 0x00ff, 0x000b);
+    assert_eq!(memory.byte(ZP_STATUS), 0x0d);
+    assert_eq!(cpu.c() & 0x00ff, 0x000d);
 }
 
 #[test]

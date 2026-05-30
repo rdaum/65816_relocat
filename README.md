@@ -83,6 +83,7 @@ The loader currently supports:
 - Text and data relocation tables.
 - Relocation target bounds checking against the text/data segment currently
   being relocated.
+- Pagewise relocation mode for `HIGH` relocation entries.
 - Exported global list scanning for `main` / `_main`.
 - Exported global publishing into the caller-supplied symbol table.
 - BSS clearing when the `BSSZERO` mode bit is set.
@@ -115,7 +116,6 @@ The loader returns status in `A` and stores it in zero page `status`.
 - `0x08`: unsupported CPU mode
 - `0x09`: malformed header option
 - `0x0a`: relocation target is outside the text/data segment being relocated
-- `0x0b`: pagewise relocation mode is unsupported
 - `0x0c`: relocation references an unresolved external symbol
 - `0x0d`: malformed relocation table
 
@@ -150,7 +150,7 @@ Coverage includes:
 - unsupported CPU2 rejection
 - native 65816, 6502, and 65816-emulation-mode entry/return
 - malformed header option rejection
-- pagewise relocation rejection
+- pagewise `HIGH` relocation
 - alignment acceptance/rejection
 - 16-bit and 32-bit size fields
 - header options and external references
@@ -162,7 +162,7 @@ Coverage includes:
 - exported `main` / `_main` entry-point selection and general export publishing
 
 The tests also keep a loader-size guard. As of this README, the assembled
-loader is `2750` bytes.
+loader is `2778` bytes.
 
 ## Remaining gaps / TODO
 
@@ -171,7 +171,6 @@ This is still a not a complete o65 runtime loader. Known gaps include:
 - 65C02, 65SC02, 65CE02, and 6502X CPU2 modes are rejected rather than
   emulated.
 - Header option payloads are not interpreted.
-- Pagewise relocation mode is rejected rather than implemented.
 - Whole-image bounds and malformed-table truncation checks are still minimal.
 
 ## Notes

@@ -39,7 +39,6 @@ O65_UNSUPPORTED_ALIGN = $07
 O65_UNSUPPORTED_CPU = $08
 O65_BAD_HEADER_OPTION = $09
 O65_RELOC_OUT_OF_BOUNDS = $0a
-O65_UNSUPPORTED_PAGE_RELOC = $0b
 O65_UNRESOLVED_EXTERNAL = $0c
 O65_BAD_RELOC_TABLE = $0d
 
@@ -349,11 +348,6 @@ check_file_type:
 	bne fail_non_simple
 
 	lda mode
-	and #O65_PAGE_RELOC
-	cmp #O65_PAGE_RELOC
-	beq fail_page_reloc
-
-	lda mode
 	and #O65_SIZE_32BIT
 	cmp #O65_SIZE_32BIT
 	bne read_16_sizes
@@ -402,11 +396,6 @@ fail_unsupported_cpu:
 	sta status
 	acc16i16
 	bra done_load_header
-fail_page_reloc:
-	acc8i16
-	lda #O65_UNSUPPORTED_PAGE_RELOC
-	sta status
-	acc16i16
 done_load_header:
 	rts
 .endscope
@@ -972,7 +961,15 @@ reloc_high:
 	lda [reloc_start]
 	sta working_addr+1
 	acc16i16
+	lda mode
+	and #O65_PAGE_RELOC
+	cmp #O65_PAGE_RELOC
+	beq high_low_zero
 	jsr prg_next_byte
+	bra store_high_low
+high_low_zero:
+	lda #0
+store_high_low:
 	acc8i16
 	sta working_addr
 	acc16i16
@@ -1175,6 +1172,21 @@ get_type_and_segment:
 	and #$0f
 	sta segment
 	acc16i16
+	lda mode
+	and #O65_PAGE_RELOC
+	cmp #O65_PAGE_RELOC
+	bne check_bounds
+	acc8i16
+	lda type
+	cmp #RELOC_HIGH
+	acc16i16
+	beq check_bounds
+	acc8i16
+	lda #O65_BAD_RELOC_TABLE
+	sta status
+	acc16i16
+	brl relocations_failed
+check_bounds:
 	jsr check_reloc_bounds
 	acc8i16
 	lda status
