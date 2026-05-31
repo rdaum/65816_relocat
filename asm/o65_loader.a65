@@ -236,33 +236,6 @@ read_context:
 	rts
 .endscope
 
-;;; TODO this could probably be rewritten
-get_32_from_offset:
-.scope
-	clc
-	lda #$ffff
-	adc seg_base
-	sta R0
-	lda #$ffff
-	adc seg_base+2
-	sta R0+2
-	clc
-	lda R0
-	adc offset
-	sta R1
-	lda R0+2
-	adc offset+2
-	sta R1+2
-	lda [R1]
-	sta working_addr
-	clc
-	inc R1
-	inc R1
-	lda [R1]
-	sta working_addr+2
-	rts
-.endscope
-
 ;;; Read current byte @ program, put in A.
 ;;; Then increment program to next position
 prg_next_byte:
