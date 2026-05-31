@@ -659,10 +659,8 @@ read_global_value_16:
 	stz R0+2
 maybe_set_entry:
 	jsr check_export_segment
-	acc8i16
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	bne done_load_exported_globals
 	jsr append_exported_symbol
 	acc8i16
@@ -1199,10 +1197,8 @@ get_type_and_segment:
 	brl relocations_failed
 check_bounds:
 	jsr check_reloc_bounds
-	acc8i16
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq relocation_bounds_ok
 	brl relocations_failed
 relocation_bounds_ok:
@@ -1250,17 +1246,13 @@ unresolved_external:
 	jsr prg_next_word
 	sta external_index
 	jsr check_external_index
-	acc8i16
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	bne relocations_failed
 	Store32 #$00000000, cur_segment_base
 	jsr resolve_external_symbol
-	acc8i16
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq external_resolved
 	bra relocations_failed
 external_resolved:
@@ -1360,42 +1352,30 @@ step_load_external_references:
 	;; We've jumped to the start of the external references list
 	;; eat that
 	jsr load_external_references
-	acc8i16
-	clc
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq step_perform_text_relocations
 	brl done_load_program
 step_perform_text_relocations:
 	Store32 seg_base, reloc_base
 	Store32 tlen, reloc_len
 	jsr perform_relocations     ; perform text seg relocations
-	acc8i16
-	clc
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq step_perform_data_relocations
 	brl done_load_program
 step_perform_data_relocations:
 	Add32 seg_base, tlen, reloc_base
 	Store32 dlen, reloc_len
 	jsr perform_relocations
-	acc8i16
-	clc
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq step_load_exported_globals
 	bra done_load_program
 step_load_exported_globals:
 	jsr load_exported_globals
-	acc8i16
-	clc
 	lda status
-	cmp #0
-	acc16i16
+	and #$00ff
 	beq step_perform_bss_clear
 	bra done_load_program
 step_perform_bss_clear:
