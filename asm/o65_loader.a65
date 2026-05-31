@@ -236,6 +236,18 @@ read_context:
 	rts
 .endscope
 
+inc_symbol_ptr:
+	Inc32 symbol_ptr
+	rts
+
+inc_R1:
+	Inc32 R1
+	rts
+
+inc_name_ptr:
+	Inc32 name_ptr
+	rts
+
 ;;; Read current byte @ program, put in A.
 ;;; Then increment program to next position
 prg_next_byte:
@@ -829,13 +841,13 @@ skip_name:
 	lda [symbol_ptr]
 	and #$00ff
 	beq skip_value
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	bra skip_name
 skip_value:
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
 	bra find_symbol_table_end
 copy_name:
 	Store32 name_ptr, R1
@@ -845,11 +857,11 @@ copy_name_byte:
 	acc8i16
 	sta [symbol_ptr]
 	acc16i16
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	lda [R1]
 	and #$00ff
 	beq write_value
-	Inc32 R1
+	jsr inc_R1
 	bra copy_name_byte
 write_value:
 	jsr exported_runtime_addr
@@ -857,17 +869,17 @@ write_value:
 	acc8i16
 	sta [symbol_ptr]
 	acc16i16
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	xba
 	acc8i16
 	sta [symbol_ptr]
 	acc16i16
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	lda working_addr+2
 	acc8i16
 	sta [symbol_ptr]
 	stz working_byte
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	lda working_byte
 	sta [symbol_ptr]
 	acc16i16
@@ -1125,10 +1137,10 @@ skip_name_byte:
 	lda [name_ptr]
 	and #$00ff
 	beq next_name
-	Inc32 name_ptr
+	jsr inc_name_ptr
 	bra skip_name_byte
 next_name:
-	Inc32 name_ptr
+	jsr inc_name_ptr
 	dex
 	bra skip_names
 done_find_external_name:
@@ -1161,26 +1173,26 @@ compare_name:
 	lda working_byte
 	beq symbol_found
 	Inc32 R0
-	Inc32 R1
+	jsr inc_R1
 	bra compare_name
 skip_symbol:
 	lda [symbol_ptr]
 	and #$00ff
 	beq skip_symbol_value
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
 	bra skip_symbol
 skip_symbol_value:
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
-	Inc32 symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
 	bra next_symbol
 symbol_found:
-	Inc32 R1
+	jsr inc_R1
 	lda [R1]
 	sta new_segment_base
-	Inc32 R1
-	Inc32 R1
+	jsr inc_R1
+	jsr inc_R1
 	lda [R1]
 	and #$00ff
 	sta new_segment_base+2
