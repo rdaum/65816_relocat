@@ -246,6 +246,19 @@ inc_name_ptr:
 	Inc32 name_ptr
 	rts
 
+skip_symbol_entry:
+	lda [symbol_ptr]
+	and #$00ff
+	beq skip_symbol_value
+	jsr inc_symbol_ptr
+	bra skip_symbol_entry
+skip_symbol_value:
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	jsr inc_symbol_ptr
+	rts
+
 ;;; Read current byte @ program, put in A.
 ;;; Then increment program to next position
 prg_next_byte:
@@ -770,17 +783,7 @@ find_symbol_table_end:
 	lda [symbol_ptr]
 	and #$00ff
 	beq copy_name
-skip_name:
-	lda [symbol_ptr]
-	and #$00ff
-	beq skip_value
-	jsr inc_symbol_ptr
-	bra skip_name
-skip_value:
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
+	jsr skip_symbol_entry
 	bra find_symbol_table_end
 copy_name:
 	Store32 name_ptr, R1
@@ -1109,16 +1112,7 @@ compare_name:
 	jsr inc_R1
 	bra compare_name
 skip_symbol:
-	lda [symbol_ptr]
-	and #$00ff
-	beq skip_symbol_value
-	jsr inc_symbol_ptr
-	bra skip_symbol
-skip_symbol_value:
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
-	jsr inc_symbol_ptr
+	jsr skip_symbol_entry
 	bra next_symbol
 symbol_found:
 	jsr inc_R1
