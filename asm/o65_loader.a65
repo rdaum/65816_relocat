@@ -155,7 +155,7 @@ check_chain_bit:
 	and #O65_CHAIN
 	cmp #O65_CHAIN
 	bne chain_done
-	brl load_chain
+	bra load_chain
 
 chain_done:
 	Store32 first_entry_addr, entry_addr
@@ -164,7 +164,7 @@ chain_done:
 	and #O65_CPU_MASK
 	cmp #O65_CPU_65816
 	beq enter_native
-	jmp enter_emulation
+	bra enter_emulation
 
 enter_native:
   ;; We'll return to 'done' after the executable exits.
@@ -643,9 +643,9 @@ read_name:
 	jsr prg_next_byte
 	cmp #0
 	bne continue_name
-	jmp finish_name
+	bra finish_name
 continue_name:
-	brl read_name
+	bra read_name
 finish_name:
 	PrgNext8To segment
 	lda mode
