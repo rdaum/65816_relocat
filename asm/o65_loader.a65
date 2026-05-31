@@ -321,19 +321,22 @@ done:
 check_program_available:
 .scope
 	sta R0
-	stz R0+2
 	lda image_end
 	ora image_end+2
 	beq done_check_program_available
-	Add32 program, R0, R1
-	lda image_end+2
-	cmp R1+2
-	bcc fail_truncated
-	bne done_check_program_available
-	lda image_end
-	cmp R1
-	bcc fail_truncated
-	bra done_check_program_available
+	lda program
+	clc
+	adc R0
+	sta R1
+	lda program+2
+	adc #0
+	cmp image_end+2
+	bcc done_check_program_available
+	bne fail_truncated
+	lda R1
+	cmp image_end
+	beq done_check_program_available
+	bcc done_check_program_available
 fail_truncated:
 	acc8i16
 	lda #O65_TRUNCATED_IMAGE
