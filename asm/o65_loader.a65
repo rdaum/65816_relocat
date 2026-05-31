@@ -100,8 +100,6 @@ O65_TRUNCATED_IMAGE = $0e
   first_mode:         .res 2
   emu_return_addr:    .res 4
   entry_label:        .res 1
-  name_match:         .res 1
-  name_pos:           .res 1
   chain_count:        .res 1
 
 ;;; Code section
@@ -625,124 +623,14 @@ global_loop:
 
 start_global_entry:
 	Store32 program, name_ptr
-	acc8i16
-	stz name_pos
-	lda #$03
-	sta name_match
-	acc16i16
 read_name:
 	jsr prg_next_byte
 	cmp #0
 	bne continue_name
 	jmp finish_name
 continue_name:
-	acc8i16
-	sta working_byte
-	lda name_pos
-	cmp #0
-	beq check_pos0
-	cmp #1
-	beq check_pos1
-	cmp #2
-	beq check_pos2
-	cmp #3
-	beq check_pos3
-	cmp #4
-	beq check_pos4
-	stz name_match
-	bra next_name_char
-check_pos0:
-	lda working_byte
-	cmp #$6d        ; m
-	beq pos0_main_ok
-	lda name_match
-	and #$fe
-	sta name_match
-pos0_main_ok:
-	lda working_byte
-	cmp #$5f        ; _
-	beq next_name_char
-	lda name_match
-	and #$fd
-	sta name_match
-	bra next_name_char
-check_pos1:
-	lda working_byte
-	cmp #$61        ; a
-	beq pos1_main_ok
-	lda name_match
-	and #$fe
-	sta name_match
-pos1_main_ok:
-	lda working_byte
-	cmp #$6d        ; m
-	beq next_name_char
-	lda name_match
-	and #$fd
-	sta name_match
-	bra next_name_char
-check_pos2:
-	lda working_byte
-	cmp #$69        ; i
-	beq pos2_main_ok
-	lda name_match
-	and #$fe
-	sta name_match
-pos2_main_ok:
-	lda working_byte
-	cmp #$61        ; a
-	beq next_name_char
-	lda name_match
-	and #$fd
-	sta name_match
-	bra next_name_char
-check_pos3:
-	lda working_byte
-	cmp #$6e        ; n
-	beq pos3_main_ok
-	lda name_match
-	and #$fe
-	sta name_match
-pos3_main_ok:
-	lda working_byte
-	cmp #$69        ; i
-	beq next_name_char
-	lda name_match
-	and #$fd
-	sta name_match
-	bra next_name_char
-check_pos4:
-	lda name_match
-	and #$fe
-	sta name_match
-	lda working_byte
-	cmp #$6e        ; n
-	beq next_name_char
-	lda name_match
-	and #$fd
-	sta name_match
-next_name_char:
-	inc name_pos
-	acc16i16
 	brl read_name
 finish_name:
-	acc8i16
-	lda name_pos
-	cmp #4
-	beq main_length_ok
-	lda name_match
-	and #$fe
-	sta name_match
-main_length_ok:
-	lda name_pos
-	cmp #5
-	beq under_main_length_ok
-	lda name_match
-	and #$fd
-	sta name_match
-under_main_length_ok:
-	acc16i16
-
 	PrgNext8To segment
 	lda mode
 	and #O65_SIZE_32BIT
@@ -765,14 +653,12 @@ maybe_set_entry:
 	lda segment
 	cmp #TEXT_SEGMENT
 	bne dec_global_count
-	lda name_match
-	and #$02
-	cmp #$02
+	acc16i16
+	jsr name_is_under_main
 	beq set_under_main_entry
-	lda name_match
-	and #$01
-	cmp #$01
+	jsr name_is_main
 	bne dec_global_count
+	acc8i16
 	lda entry_label
 	cmp #$02
 	beq dec_global_count
@@ -798,6 +684,53 @@ dec_global_count_low:
 	dec num_references
 	brl global_loop
 done_load_exported_globals:
+	rts
+.endscope
+
+name_is_main:
+.scope
+	ldy #0
+	lda [name_ptr],y
+	cmp #$616d        ; ma
+	bne not_main
+	iny
+	iny
+	lda [name_ptr],y
+	cmp #$6e69        ; in
+	bne not_main
+	iny
+	iny
+	lda [name_ptr],y
+	and #$00ff
+	rts
+not_main:
+	lda #1
+	rts
+.endscope
+
+name_is_under_main:
+.scope
+	ldy #0
+	lda [name_ptr],y
+	cmp #$6d5f        ; _m
+	bne not_under_main
+	iny
+	iny
+	lda [name_ptr],y
+	cmp #$6961        ; ai
+	bne not_under_main
+	iny
+	iny
+	lda [name_ptr],y
+	and #$00ff
+	cmp #$006e        ; n
+	bne not_under_main
+	iny
+	lda [name_ptr],y
+	and #$00ff
+	rts
+not_under_main:
+	lda #1
 	rts
 .endscope
 
